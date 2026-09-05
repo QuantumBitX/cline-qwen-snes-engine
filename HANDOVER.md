@@ -1,8 +1,8 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-04. Branch: `master` (single commit: `cfacfda` — v0 scaffold).
-> The one thing we're working on right now: **choosing & wiring a chiptune background track.**
+> Last updated: 2026-09-05. Branch: `master` (single commit: `cfacfda` — v0 scaffold).
+> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md`.**
 
 ---
 
@@ -37,6 +37,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `js/game.js` (398 ln) | Physics, collision, entities, camera, HUD, loop, **SFX** | ✅ done (tracked) — **2 known bugs, see §5** |
 | `js/chiptune.js` (284 ln) | **NEW** NES-style sequencer + 3 original tracks + `window.Chiptune` API | ✅ done (untracked) |
 | `music_options.html` (138 ln) | **NEW** standalone page to listen to & pick a track | ✅ done (untracked) |
+| `ROADMAP_SNES_UPGRADE.md` | **NEW** full SNES‑engine upgrade roadmap (Phase 0–7) | 📋 plan — see §3 |
 | `README.md` | Project overview / run instructions | ✅ done |
 | `generate_mario_summary.py` | Python (`python-docx`) status-doc generator | ✅ done (untracked) |
 | `Mario_Project_Summary.docx` | Generated status doc (v0 + 2 bugs) | ⚠️ generated artifact |
@@ -47,19 +48,21 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 
 ---
 
-## 3. The current task — Music (where we left off)
+## 3. The current task — SNES Engine Upgrade (where we left off)
 
-Three **original 8-bit chiptune themes** are composed and **playable** on a standalone page. The user has **not yet picked one**. Next session: **(a) user listens & chooses A/B/C, then (b) integrate the chosen track into the game.**
+The focus has moved from music to a **major engine upgrade**: bringing *Super Plumber Bros.* up to a **16-bit SNES / Super Mario World** standard. A complete, phased plan is now in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7). No game code has been changed yet — it is plan-only so far.
 
-### How to listen (do this first)
-Open `music_options.html` in a browser. There are **PLAY A / PLAY B / PLAY C** buttons, a **PLAY ALL 3** auto-cycler (12 s each), and a **STOP** button.
+**Scope of the roadmap:**
+- **Engine & physics** — data-driven multi-layer JSON tilemaps (`background`/`collision`/`foreground`), decorative autotiling (grass/dirt/corners), and a new **slope + one-way-platform physics** core (45° & 22.5° slopes via a per-tile height field).
+- **Asset pipeline** — PNG sprite-sheet atlas loader + a state-based animation controller (idle/run/skid/jump/fall by velocity + ground state + power-up).
+- **Rendering & juice** — data-driven multi-layer **parallax** scrolling (sky → mountains → hills → foreground-over-player) and a pooled **VFX** system (skid/land dust, coin-pop + score float, block-bounce sine displacement).
 
-### The three candidates
-| | Name | Feel | Spec |
-|---|---|---|---|
-| **A** | **Overworld March** | Upbeat, bouncy, heroic | 128 BPM · C major · fast |
-| **B** | **Sunny Meadow** | Warm, melodic, singable | 112 BPM · G major · mellow |
-| **C** | **Castle Quest** | Bold, adventurous fanfare | 122 BPM · D minor · epic |
+**First things to confirm with the user (before any code):**
+1. Module system — ES modules (recommended) vs keep IIFEs.
+2. Logical resolution — 256×240 (recommended) vs 512×240 wide.
+3. Art — generate placeholder PNG sheets now vs wait for user-supplied art.
+
+> **Minor still-pending item:** the chiptune **track choice (A/B/C)** from §4 is no longer the active task but is a quick follow-up whenever music integration is wanted. Details remain in §4–§6.
 
 ---
 
@@ -135,19 +138,23 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 ---
 
 ## 7. Immediate next steps (in order)
-1. [ ] User listens on `music_options.html` and **picks A / B / C** (or asks for a tweak: tempo, key, add a counter-melody, etc.).
-2. [ ] Integrate the chosen track per **§6** (edit `index.html` + `js/game.js`).
-3. [ ] Add `M` mute + `P` pause handling for the music; verify it doesn't clash with SFX.
-4. [ ] **Test end-to-end in a browser**: title → play → pause → die → game over → win; confirm music behaves and SFX stay audible.
-5. [ ] Commit `js/chiptune.js`, `music_options.html`, and the `game.js`/`index.html` edits. (Keep `music_options.html` as an A/B preview, or delete if unwanted.)
-6. [ ] Optionally return to the **two known bugs in §5** (stomp collision, camera).
+1. [ ] **Confirm the 3 open decisions** in `ROADMAP_SNES_UPGRADE.md` (module system, resolution, art source).
+2. [ ] **Phase 0** — split `game.js` into `engine/` modules, centralise constants, and **fix the 2 known bugs from §5** (stomp + camera) so physics work is built on a clean base.
+3. [ ] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour).
+4. [ ] **Phase 2 → 3** — autotiling, then the slope / one-way physics core.
+5. [ ] **Phase 4–6** (any order) — sprite sheets + animation controller, parallax, VFX.
+6. [ ] Validate **each phase in a browser** (`python3 -m http.server 8000`); the dev-container has no node.
+7. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).
+8. [ ] Commit incrementally after each phase lands.
 
 ---
 
-## 8. Roadmap (from `README.md` — not started)
+## 8. Roadmap
+
+The full upgrade plan now lives in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7: foundations, data-driven tilemaps, autotiling, slope/one-way physics, sprite sheets + animation, parallax, VFX, SMW polish). The items below are the original long-tail ideas, now folded into Phase 7:
 - More enemy types (Koopa Troopa, flyers) + a second power-up (fire).
 - More levels / a world map, moving platforms, 1-2-style interiors.
-- A proper pixel font for the HUD + a chiptune music loop (← the engine we just built serves this).
+- A proper pixel font for the HUD + a chiptune music loop.
 - High-score persistence via `localStorage`.
 
 ---
