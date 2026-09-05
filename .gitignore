@@ -1,0 +1,10 @@
+# macOS / temp noise
+.DS_Store
+~$*.docx
+*.tmp
+
+# agent session data
+cline-session/
+
+# node (if ever added)
+node_modules/

@@ -3,10 +3,7 @@
 //  Built once at load. The builder is tolerant: a short row is
 //  padded with transparency, so minor authoring slips are safe.
 // ============================================================
-(function (global) {
-  'use strict';
-
-  function buildSprite(rows, palette) {
+function buildSprite(rows, palette) {
     let w = 0;
     for (let i = 0; i < rows.length; i++) if (rows[i].length > w) w = rows[i].length;
     const cv = document.createElement('canvas');
@@ -132,7 +129,7 @@
     "...ssssssssss...",
   ], MUSH_PAL);
 
-  global.Sprites = { marioSmall, marioSmallJump, marioBig, goomba, mushroom, buildSprite };
+export const Sprites = { marioSmall, marioSmallJump, marioBig, goomba, mushroom, buildSprite };
 
   // Dev validation (open DevTools console to inspect)
   (function () {
@@ -140,5 +137,3 @@
     const dims = { marioSmall: d(marioSmall), marioSmallJump: d(marioSmallJump), marioBig: d(marioBig), goomba: d(goomba), mushroom: d(mushroom) };
     console.log('[Sprites] ready', dims);
   })();
-
-})(window);

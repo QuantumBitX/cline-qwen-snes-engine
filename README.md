@@ -9,15 +9,16 @@ staircase and a flagpole.
 
 ## Run it
 
-Just open `index.html` in any modern browser (Chrome / Edge / Firefox / Safari).
-That's it.
-
-If you prefer a local server (not required):
+Serve it over local HTTP and open it in a browser. The game is built from
+**ES modules**, which most browsers refuse to load from `file://` — a tiny
+static server is the only requirement (still no build step, no npm):
 
 ```bash
 python3 -m http.server 8000
 # then open http://localhost:8000
 ```
+
+Works in Chrome / Edge / Firefox / Safari.
 
 ## Controls
 
@@ -41,13 +42,22 @@ python3 -m http.server 8000
 
 ## Design / architecture
 
-| File            | Responsibility                                        |
-| --------------- | ----------------------------------------------------- |
-| `index.html`    | Canvas + control hints + script order                 |
-| `style.css`     | Layout + crisp `image-rendering: pixelated` scaling   |
-| `js/sprites.js` | Pixel-art sprite data → offscreen canvases            |
-| `js/level.js`   | Level 1-1 as clean feature placements                 |
-| `js/game.js`    | Physics, collision, entities, camera, HUD, game loop  |
+Pure **ES modules** (no build step). `js/game.js` is the single entry point
+and imports everything else.
+
+| File                       | Responsibility                                          |
+| -------------------------- | ------------------------------------------------------- |
+| `index.html`               | Canvas + control hints + single `<script type="module">`|
+| `style.css`                | Layout + crisp `image-rendering: pixelated` scaling     |
+| `js/game.js`               | Physics, collision, entities, HUD, orchestration        |
+| `js/engine/constants.js`   | Every tunable (view, physics, camera) in one place      |
+| `js/engine/input.js`       | Keyboard state + jump edge detection                    |
+| `js/engine/loop.js`        | Fixed 60fps timestep loop                               |
+| `js/engine/camera.js`      | Smooth follow + look-ahead (bounded, never loses player)|
+| `js/sprites.js`            | Pixel-art sprite data → offscreen canvases              |
+| `js/level.js`              | Level 1-1 as clean feature placements                   |
+| `js/chiptune.js`           | WebAudio note engine + track definitions                |
+| `test/harness.mjs`         | Headless behaviour tests (runs the real module under Node)|
 
 Key implementation notes:
 
@@ -60,6 +70,18 @@ Key implementation notes:
 - Enemies **activate** when the camera nears them (classic NES behaviour).
 - Rendering targets a **256×240** canvas (true NES resolution) and is scaled up
   with `image-rendering: pixelated` for the authentic look.
+
+## Testing
+
+Headless behaviour tests run the real game module under Node with a small
+browser stub (no browser required):
+
+```bash
+node test/harness.mjs     # or: npm test
+```
+
+Covers boot, start, movement, jump, the **stomp fix**, stomp-vs-side-hit
+discrimination, flag completion, and the **camera follow/bounds** fix.
 
 ## Ideas for next
 

@@ -2,9 +2,6 @@
 //  CHIPTUNE ENGINE  -  NES-style sequencer + 3 original tracks
 //  Channels: pulse1 (lead), pulse2 (arpeggio), triangle (bass), noise (drums)
 // ============================================================
-(function (global) {
-  'use strict';
-
   // --- note helpers: name -> midi number, midi -> Hz ---
   const NAMES = { C:0, D:1, E:2, F:3, G:4, A:5, B:6 };
   function midi(note) {
@@ -116,7 +113,7 @@
   let ac = null, master = null, masterVol = 0.5;
   function ensureCtx() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
-    const AC = global.AudioContext || global.webkitAudioContext;
+    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (!AC) return;
     ac = new AC();
     master = ac.createGain();
@@ -276,14 +273,9 @@
     if (master && ac) master.gain.value = masterVol;
   }
 
-  global.Chiptune = {
-    start: start,
-    stop: stop,
-    tracks: TRACKS,
-    ensure: ensureCtx,
-    setVolume: setVolume
-  };
-})(window);
+export const Chiptune = {
+  start, stop, tracks: TRACKS, ensure: ensureCtx, setVolume,
+};
 
 
 

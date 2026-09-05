@@ -1,0 +1,10 @@
+{
+  "name": "super-plumber-bros",
+  "version": "0.2.0",
+  "private": true,
+  "description": "SNES-era canvas platformer. Pure ES modules, no build step, no dependencies.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/harness.mjs"
+  }
+}

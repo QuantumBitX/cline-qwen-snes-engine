@@ -21,9 +21,9 @@
     </div>
   </div>
 
-  <script src="js/sprites.js"></script>
-  <script src="js/level.js"></script>
-  <script src="js/chiptune.js"></script>
-  <script src="js/game.js"></script>
+  <!-- Single ES-module entry point; it imports sprites/level/chiptune/engine.
+       Serve over HTTP (e.g. `python3 -m http.server`) — modules don't load
+       from file:// in most browsers. -->
+  <script type="module" src="js/game.js"></script>
 </body>
 </html>

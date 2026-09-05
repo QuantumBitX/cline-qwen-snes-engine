@@ -1,26 +1,29 @@
-=====================================================
+//=====================================================
 //  SUPER PLUMBER BROS.  -  NES-era platformer (canvas + keyboard)
 // ============================================================
-(function (global) {
-  'use strict';
+import {
+  VIEW_W, VIEW_H, TILE,
+  GRAV_UP_HELD, GRAV_UP_RELEAS, GRAV_DOWN, JUMP_VEL, TERM_VY,
+  MAX_WALK, MAX_RUN, ACCEL_WALK, ACCEL_RUN, FRIC_GROUND,
+  STOMP, STOMP_HOLD, STOMP_TOL,
+  PLAYER_W as PW, SMALL_H, BIG_H, INVULN, START_TIME, TIME_TICK,
+} from './engine/constants.js';
+import { createInput } from './engine/input.js';
+import { runLoop } from './engine/loop.js';
+import { createCamera } from './engine/camera.js';
+import { Sprites } from './sprites.js';
+import { buildLevel } from './level.js';
+import { Chiptune } from './chiptune.js';
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
-  const VIEW_W = 256, VIEW_H = 240, TILE = 16;
-
-  // --- physics tuning (pixels @ 60fps) ---
-  const GRAV_UP_HELD = 0.50, GRAV_UP_RELEAS = 0.90, GRAV_DOWN = 0.65;
-  const JUMP_VEL = -9.2, TERM_VY = 12;
-  const MAX_WALK = 2.0, MAX_RUN = 3.0, ACCEL_WALK = 0.40, ACCEL_RUN = 0.55;
-  const FRIC_GROUND = 0.5, FRIC_AIR = 0.06;
-  const STOMP = -5.0, STOMP_HOLD = -7.5;
-  const PW = 12, SMALL_H = 14, BIG_H = 28, INVULN = 120, START_TIME = 300, TIME_TICK = 24;
+  // (all tunables are imported from engine/constants.js)
 
   // --- SFX (WebAudio bleeps) ---
   const SFX = (function () {
     let ac = null;
-    function ensure() { if (!ac) { try { ac = new (global.AudioContext || global.webkitAudioContext)(); } catch (e) { } } if (ac && ac.state === 'suspended') ac.resume(); }
+    function ensure() { if (!ac) { try { ac = new (globalThis.AudioContext || globalThis.webkitAudioContext)(); } catch (e) { } } if (ac && ac.state === 'suspended') ac.resume(); }
     function tone(f, d, type, vol, slide) {
       if (!ac) return; const t = ac.currentTime; const o = ac.createOscillator(), g = ac.createGain();
       o.type = type || 'square'; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + d);
@@ -47,14 +50,14 @@
     const TRACK = 'C'; // Cloud Drift (92 BPM, C major)
     const VOL = 0.35;
     let muted = false;
-    function ensure() { if (global.Chiptune) { global.Chiptune.setVolume(muted ? 0.001 : VOL); global.Chiptune.ensure(); } }
-    function start() { if (!muted && global.Chiptune) { global.Chiptune.setVolume(VOL); global.Chiptune.start(TRACK); } }
-    function stop() { if (global.Chiptune) global.Chiptune.stop(); }
+    function ensure() { if (Chiptune) { Chiptune.setVolume(muted ? 0.001 : VOL); Chiptune.ensure(); } }
+    function start() { if (!muted && Chiptune) { Chiptune.setVolume(VOL); Chiptune.start(TRACK); } }
+    function stop() { if (Chiptune) Chiptune.stop(); }
     function toggleMute() {
       muted = !muted;
-      if (global.Chiptune) {
-        if (muted) { global.Chiptune.setVolume(0.001); global.Chiptune.stop(); }
-        else { global.Chiptune.setVolume(VOL); global.Chiptune.start(TRACK); }
+      if (Chiptune) {
+        if (muted) { Chiptune.setVolume(0.001); Chiptune.stop(); }
+        else { Chiptune.setVolume(VOL); Chiptune.start(TRACK); }
       }
       return muted;
     }
@@ -66,28 +69,25 @@
   let grid, W, H, coins, enemies, mushrooms, coinPops, shards, bounces;
   let player, camX, score, coinsTotal, lives, timeLeft, timeFrame, frame = 0;
   let state, deathTimer, completeTimer, flagX, flagBaseY, flagSlideDone = false;
-  let paused = false, jumpWasDown = false, curJumpHeld = false, curJumpPressed = false;
-  const Sprites = global.Sprites;
+  let paused = false, jumpHeld = false, jumpPressed = false;
 
-  // --- input ---
-  const keys = {};
-  global.addEventListener('keydown', (e) => {
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
-    keys[e.code] = true;
+  // --- input + camera (engine/) ---
+  const input = createInput(window);
+  const camera = createCamera();
+  input.onKey((e) => {
     if (e.code === 'Enter') { SFX.ensure(); Music.ensure(); if (state === 'title' || state === 'gameover' || state === 'win') startGame(); }
     if (e.code === 'KeyP') { if (state === 'playing') { paused = !paused; if (paused) Music.stop(); else Music.start(); } }
     if (e.code === 'KeyM') { Music.toggleMute(); if (paused) Music.stop(); }
   });
-  global.addEventListener('keyup', (e) => { keys[e.code] = false; });
   // --- level load / reset ---
   function loadLevel(fullReset) {
-    const L = global.buildLevel();
+    const L = buildLevel();
     grid = L.grid; W = L.w; H = L.h; coins = L.coins;
     flagX = L.flagCol * TILE + 8; flagBaseY = L.flagBaseRow * TILE;
     enemies = L.enemies.map((e) => ({ x: e.col * TILE, y: e.row * TILE - 14, w: 14, h: 14, vx: -0.5, vy: 0, active: false, dead: false, squish: 0, onGround: false }));
     mushrooms = []; coinPops = []; shards = []; bounces = [];
     if (fullReset) { score = 0; coinsTotal = 0; lives = 3; }
-    resetPlayer(); camX = 0; timeLeft = START_TIME; timeFrame = 0;
+    resetPlayer(); camera.reset(0); camX = 0; timeLeft = START_TIME; timeFrame = 0;
   }
   function resetPlayer() {
     player = { x: 2 * TILE, y: 13 * TILE - SMALL_H, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
@@ -145,8 +145,8 @@
   // --- player ---
   function updatePlayer() {
     const p = player;
-    const left = keys.ArrowLeft || keys.KeyA, right = keys.ArrowRight || keys.KeyD;
-    const run = keys.ShiftLeft || keys.ShiftRight || keys.KeyX;
+    const left = input.held.ArrowLeft || input.held.KeyA, right = input.held.ArrowRight || input.held.KeyD;
+    const run = input.held.ShiftLeft || input.held.ShiftRight || input.held.KeyX;
     const maxS = run ? MAX_RUN : MAX_WALK, acc = run ? ACCEL_RUN : ACCEL_WALK;
     if (left && !right) { p.vx -= acc; p.facing = -1; }
     else if (right && !left) { p.vx += acc; p.facing = 1; }
@@ -154,10 +154,11 @@
     p.vx = clamp(p.vx, -maxS, maxS);
     if (!left && !right && Math.abs(p.vx) < 0.05) p.vx = 0;
 
-    if (curJumpPressed && p.onGround) { p.vy = JUMP_VEL; p.onGround = false; SFX.jump(); }
-    const g = p.vy < 0 ? (curJumpHeld ? GRAV_UP_HELD : GRAV_UP_RELEAS) : GRAV_DOWN;
+    if (jumpPressed && p.onGround) { p.vy = JUMP_VEL; p.onGround = false; SFX.jump(); }
+    const g = p.vy < 0 ? (jumpHeld ? GRAV_UP_HELD : GRAV_UP_RELEAS) : GRAV_DOWN;
     p.vy += g; if (p.vy > TERM_VY) p.vy = TERM_VY;
 
+    const prevBottom = p.y + p.h;   // BUG #1 fix: remember feet line before moving
     p.bumped = false;
     move(p, true);
     if (p.bumped) handleBump(p.bumpTx, p.bumpTy);
@@ -166,17 +167,21 @@
 
     if (p.invuln > 0) p.invuln--;
     p.anim += Math.abs(p.vx);
-    checkEnemies(p);
+    checkEnemies(p, prevBottom);
     if (p.y > VIEW_H + 40) killPlayer();
   }
   // --- enemies ---
-  function checkEnemies(p) {
+  function checkEnemies(p, prevBottom) {
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i]; if (e.dead) continue;
-      if (aabb(p, e)) {
-        if (p.vy > 0 && (p.y + p.h - e.y) < 10) { e.dead = true; e.squish = 28; p.vy = curJumpHeld ? STOMP_HOLD : STOMP; p.y = e.y - p.h; addScore(100); SFX.stomp(); }
-        else damagePlayer();
-      }
+      if (!aabb(p, e)) continue;
+      // BUG #1 FIX: a stomp is when we were above the enemy's top line last
+      // frame (within STOMP_TOL) and are falling into it this frame. Using the
+      // previous feet position instead of the current overlap depth makes stomps
+      // reliable even when the overlap is registered a frame late.
+      const fromAbove = prevBottom <= e.y + STOMP_TOL;
+      if (p.vy >= 0 && fromAbove) { e.dead = true; e.squish = 28; p.vy = jumpHeld ? STOMP_HOLD : STOMP; p.y = e.y - p.h; addScore(100); SFX.stomp(); }
+      else damagePlayer();
     }
   }
   function updateEnemies() {
@@ -220,7 +225,7 @@
   }
   // --- timer / camera / flag ---
   function updateTimer() { timeFrame++; if (timeFrame >= TIME_TICK) { timeFrame = 0; timeLeft--; if (timeLeft <= 0) { timeLeft = 0; killPlayer(); } } }
-  function updateCamera() { camX = clamp(player.x - VIEW_W * 0.35, 0, W * TILE - VIEW_W); }
+  function updateCamera() { camera.update(player, W * TILE); camX = camera.x; }
   function checkFlag() {
     if (state === 'playing' && player.x + player.w / 2 >= flagX) {
       state = 'complete';
@@ -245,8 +250,8 @@
   function update() {
     frame++;
     if (paused) return;
-    curJumpHeld = keys.Space || keys.ArrowUp || keys.KeyW;
-    curJumpPressed = curJumpHeld && !jumpWasDown; jumpWasDown = curJumpHeld;
+    jumpHeld = input.jumpHeld();
+    jumpPressed = input.tickJump();
 
     if (state === 'title') return;
     if (state === 'gameover' || state === 'win') return;
@@ -398,22 +403,26 @@
     ctx.fillStyle = '#fff'; ctx.font = 'bold 16px monospace'; ctx.fillText('PAUSED', 128, 110);
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   }
-  // --- fixed-timestep loop (60fps logic) ---
-  let last = performance.now(), acc = 0;
-  const STEP = 1000 / 60;
-  function loop(now) {
-    requestAnimationFrame(loop);
-    let dt = now - last; last = now;
-    if (dt > 100) dt = 100;
-    acc += dt;
-    while (acc >= STEP) { update(); acc -= STEP; }
-    render();
-  }
-
-  // --- boot ---
+  // --- boot (fixed-timestep loop lives in engine/loop.js) ---
   state = 'title';
   loadLevel(true);
-  requestAnimationFrame(loop);
+  runLoop(update, render);
 
-})(window);
+  // --- test / debug handle (used by test/harness.mjs; harmless in browser) ---
+  export const __internals = {
+    get state() { return state; },
+    get player() { return player; },
+    get camX() { return camX; },
+    get score() { return score; },
+    get coins() { return coins; },
+    get lives() { return lives; },
+    get timeLeft() { return timeLeft; },
+    get enemies() { return enemies; },
+    get frame() { return frame; },
+    get grid() { return grid; },
+    get W() { return W; },
+    get H() { return H; },
+    get flagX() { return flagX; },
+    startGame,
+  };
 

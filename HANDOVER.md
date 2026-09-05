@@ -1,8 +1,9 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-05. Branch: `master` (single commit: `cfacfda` — v0 scaffold).
-> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md`.**
+> Last updated: 2026-09-05. Branch: `master`. **Phase 0 of the SNES upgrade is complete and committed**
+> (ES-module refactor + both §5 bugs fixed + headless Node test harness). Node 22 is now installed.
+> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 1).**
 
 ---
 
@@ -10,7 +11,7 @@
 
 A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pure HTML / CSS / Canvas / JavaScript**. No libraries, no build step, no npm. One fully playable level (**World 1-1**).
 
-- Open `index.html` in any modern browser and it just runs. (Optionally: `python3 -m http.server 8000`.)
+- Serve it over HTTP (`python3 -m http.server 8000`) and open `index.html` in a browser — the game is now **ES modules**, which need HTTP (not `file://`).
 - Renders at true NES resolution (**256×240**) and scales up with `image-rendering: pixelated`.
 - Fixed **60 fps logic timestep** inside `requestAnimationFrame` (identical feel on 60Hz/144Hz).
 - Axis-separated AABB collision vs a tile grid (move X → resolve → move Y → resolve).
@@ -34,8 +35,14 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `style.css` | Layout + pixelated scaling | ✅ done (tracked) |
 | `js/sprites.js` (144 ln) | Pixel-art sprite data → offscreen canvases | ✅ done (tracked) |
 | `js/level.js` (85 ln) | Level 1-1 as feature placements | ✅ done (tracked) |
-| `js/game.js` (398 ln) | Physics, collision, entities, camera, HUD, loop, **SFX** | ✅ done (tracked) — **2 known bugs, see §5** |
-| `js/chiptune.js` (284 ln) | **NEW** NES-style sequencer + 3 original tracks + `window.Chiptune` API | ✅ done (untracked) |
+| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/` | ✅ refactored (Phase 0) — **§5 bugs fixed** |
+| `js/engine/constants.js` | **NEW** all tunables (view/physics/camera) in one place | ✅ Phase 0 |
+| `js/engine/input.js` | **NEW** keyboard state + jump edge detection | ✅ Phase 0 |
+| `js/engine/loop.js` | **NEW** fixed 60fps timestep | ✅ Phase 0 |
+| `js/engine/camera.js` | **NEW** smooth look-ahead follow + safety clamp | ✅ Phase 0 (bug #2) |
+| `js/chiptune.js` (284 ln) | NES-style sequencer + 3 original tracks (now an ES-module export) | ✅ done |
+| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs | ✅ Phase 0 |
+| `package.json` | **NEW** `{"type":"module"}` + `npm test` (no deps/build) | ✅ Phase 0 |
 | `music_options.html` (138 ln) | **NEW** standalone page to listen to & pick a track | ✅ done (untracked) |
 | `ROADMAP_SNES_UPGRADE.md` | **NEW** full SNES‑engine upgrade roadmap (Phase 0–7) | 📋 plan — see §3 |
 | `README.md` | Project overview / run instructions | ✅ done |
@@ -50,7 +57,9 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 
 ## 3. The current task — SNES Engine Upgrade (where we left off)
 
-The focus has moved from music to a **major engine upgrade**: bringing *Super Plumber Bros.* up to a **16-bit SNES / Super Mario World** standard. A complete, phased plan is now in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7). No game code has been changed yet — it is plan-only so far.
+The focus is a **major engine upgrade**: bringing *Super Plumber Bros.* up to a **16-bit SNES / Super Mario World** standard. A complete, phased plan is in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7).
+
+**Status: Phase 0 is complete and committed.** The codebase is now pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, 20 assertions) that runs the real game module and validates behaviour. **Phase 1 (JSON levels) is next.**
 
 **Scope of the roadmap:**
 - **Engine & physics** — data-driven multi-layer JSON tilemaps (`background`/`collision`/`foreground`), decorative autotiling (grass/dirt/corners), and a new **slope + one-way-platform physics** core (45° & 22.5° slopes via a per-tile height field).
@@ -88,16 +97,16 @@ Self-contained IIFE exposing `window.Chiptune = { start(track), stop(), tracks, 
 
 ## 5. Known bugs in the game (pre-existing, not music-related)
 
-Tracked in `Mario_Project_Summary.docx`. Neither is fixed yet.
+**Both fixed in Phase 0** (verified by `test/harness.mjs`):
 
-| # | Bug | Where | Severity |
-|---|---|---|---|
-| 1 | **Enemy stomp collision fails** — landing on a Goomba often deals damage instead of a stomp (stomp branch requires `vy > 0` + shallow overlap; late-registered stomps fall through) | `js/game.js` player-vs-enemy overlap (~line 156) | High |
-| 2 | **Camera leaves player behind** while running — no smoothing/look-ahead | `js/game.js` `updateCamera()` (~line 202) | Medium |
+| # | Bug | Fix (Phase 0) |
+|---|---|---|
+| 1 | **Enemy stomp collision fails** — late-registered stomps fell through / dealt damage | `checkEnemies()` now registers the stomp from the player's **previous-frame feet line** (`prevBottom <= enemy.top + STOMP_TOL`) while falling, instead of a shallow current-frame overlap. Side hits still deal damage. |
+| 2 | **Camera leaves player behind** while running — no smoothing/look-ahead | `updateCamera()` now uses `engine/camera.js`: smooth, bounded follow (≤ `CAM_MAX_STEP` px/frame) + look-ahead, plus a **hard safety clamp** that guarantees the player is always on screen. |
 
-Suggested fixes:
-1. Register the stomp from the player's **previous-frame position** relative to the enemy's top edge, rather than requiring a shallow current-frame overlap.
-2. Add clamped look-ahead or smoothing to `camX` in `updateCamera()` so the player stays in view while running.
+Original descriptions (for reference):
+1. Stomp branch required `vy > 0` + a shallow current-frame overlap.
+2. `updateCamera()` was a hard snap to `player.x - VIEW_W * 0.35`.
 
 ---
 
@@ -138,12 +147,12 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 ---
 
 ## 7. Immediate next steps (in order)
-1. [ ] **Confirm the 3 open decisions** in `ROADMAP_SNES_UPGRADE.md` (module system, resolution, art source).
-2. [ ] **Phase 0** — split `game.js` into `engine/` modules, centralise constants, and **fix the 2 known bugs from §5** (stomp + camera) so physics work is built on a clean base.
-3. [ ] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour).
+1. [x] **Confirm the 3 open decisions** — chose: **ES modules**, **256×240** (no disruption), **keep existing canvas pixel-art as placeholder art** (Phase 4 swaps in PNG sheets).
+2. [x] **Phase 0** — split `game.js` into `js/engine/` modules, centralised constants in `engine/constants.js`, **fixed both §5 bugs**, added the headless `test/harness.mjs`.
+3. [ ] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour, verified by grid-diff + harness).
 4. [ ] **Phase 2 → 3** — autotiling, then the slope / one-way physics core.
 5. [ ] **Phase 4–6** (any order) — sprite sheets + animation controller, parallax, VFX.
-6. [ ] Validate **each phase in a browser** (`python3 -m http.server 8000`); the dev-container has no node.
+6. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
 7. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).
 8. [ ] Commit incrementally after each phase lands.
 
@@ -160,7 +169,7 @@ The full upgrade plan now lives in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7: f
 ---
 
 ## 9. Environment / gotchas
-- **Dev container is VS Code Linux**; `python3` is available, but there is **no JS runtime** (`node`/`deno`/`bun` not installed) — you can't `node --check` JS here; validate by loading it in a browser.
+- **Dev container is VS Code Linux**; `python3` is available and **Node 22 (arm64) is now installed** (`node`/`npm` via `apt-get`), so you can `node --check` files and run the headless harness (`node test/harness.mjs`). Node is only for dev/validation — the game still runs in a browser with no build step.
 - The workspace path **contains a space** — always quote it in shell: `"/workspaces/Cline Mario World Test"`.
 - Browser autoplay: WebAudio won't start until a user gesture — that's why we tie `ensure()` to the Enter/title interaction (§6).
 - `~$rio_Project_Summary.docx` is a Word lock file (appears when the `.docx` is open); safe to remove. `.DS_Store` is macOS noise.

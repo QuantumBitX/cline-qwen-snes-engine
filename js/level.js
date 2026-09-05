@@ -9,10 +9,7 @@
 //    'E'/'R' pipe body (left/right)
 //  Floating coins 'C' and enemies are returned as entities.
 // ============================================================
-(function (global) {
-  'use strict';
-
-  const TILE = 16;
+const TILE = 16;
   const LEVEL_W = 176;
   const LEVEL_H = 15;
 
@@ -81,5 +78,4 @@
     return { w: LEVEL_W, h: LEVEL_H, grid: g, coins, enemies, flagCol, flagTopRow: 5, flagBaseRow: 13 };
   }
 
-  global.buildLevel = buildLevel;
-})(window);
+export { buildLevel };
