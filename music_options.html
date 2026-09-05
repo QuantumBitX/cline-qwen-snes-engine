@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Super Plumber Bros. - Choose Your Theme</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { align-items: flex-start; overflow-y: auto; padding: 24px 0; }
+    #wrap { gap: 16px; }
+    h1 { color: #ffd000; font-family: 'Courier New', monospace; letter-spacing: 2px; }
+    .sub { color: #9aa0b4; max-width: 720px; line-height: 1.5; }
+    .cards { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; max-width: 960px; }
+    .card {
+      background: #17171d; border: 2px solid #2a2a30; border-radius: 8px;
+      padding: 18px; width: 280px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .card.selected { border-color: #ffd000; box-shadow: 0 0 0 2px #ffd00055; }
+    .card h2 { margin: 0; color: #fff; font-size: 17px; }
+    .card .key { color: #ffd000; font-size: 12px; letter-spacing: 1px; }
+    .card p { margin: 0; color: #b7bccb; font-size: 13px; line-height: 1.5; }
+    .card .spec { color: #7d8296; font-size: 12px; }
+    .row { display: flex; gap: 8px; }
+    button {
+      flex: 1; font-family: inherit; font-size: 14px; font-weight: bold;
+      padding: 10px 12px; border-radius: 6px; border: 2px solid #2a2a30;
+      background: #23232b; color: #fff; cursor: pointer;
+    }
+    button:hover { background: #2f2f3a; }
+    button.primary { background: #ffd000; color: #20180a; border-color: #ffd000; }
+    button.primary:hover { background: #ffdd40; }
+    button.playing { background: #0f8a3c; border-color: #0f8a3c; }
+    .status { text-align: center; color: #9aa0b4; font-size: 13px; min-height: 18px; }
+    #bigplay { max-width: 320px; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <h1>CHOOSE YOUR THEME</h1>
+    <div class="sub">
+      Three original 8-bit chiptune candidates, synthesized live in your browser with a
+      classic NES-style soundfont (2 pulse channels + triangle bass + noise drums).
+      Press <b>PLAY</b> on each, then pick the one you want built into the game.
+    </div>
+    <div class="row" style="justify-content:center; max-width:720px;">
+      <button id="bigplay" class="primary">&#9658; PLAY ALL 3 (auto-cycle)</button>
+      <button id="stop">&#9632; STOP</button>
+    </div>
+    <div class="status" id="status">Press PLAY on a track to preview it.</div>
+    <div class="cards">
+      <div class="card" data-track="A">
+        <div class="key">OPTION A</div>
+        <h2>Overworld March</h2>
+        <p>Upbeat, bouncy and heroic. A driving C-major melody with an 8th-note
+           triangle bass and a bright drum pattern — pure 90s power-up energy.</p>
+        <div class="spec">128 BPM &middot; C major &middot; fast</div>
+        <button class="play" data-track="A">&#9658; PLAY A</button>
+        <button class="select" data-track="A">PICK A</button>
+      </div>
+      <div class="card" data-track="B">
+        <div class="key">OPTION B</div>
+        <h2>Sunny Meadow</h2>
+        <p>Warm, melodic and singable. A gentle 2/4 walk-and-jump theme with a
+           rounder, cozier feel — great for a relaxed exploration vibe.</p>
+        <div class="spec">112 BPM &middot; G major &middot; mellow</div>
+        <button class="play" data-track="B">&#9658; PLAY B</button>
+        <button class="select" data-track="B">PICK B</button>
+      </div>
+      <div class="card" data-track="C">
+        <div class="key">OPTION C</div>
+        <h2>Castle Quest</h2>
+        <p>Bold and adventurous. A minor-key fanfare with punchy drums, brass-like
+           pulse leads and a driving rhythm — an epic, confident overworld.</p>
+        <div class="spec">122 BPM &middot; D minor &middot; epic</div>
+        <button class="play" data-track="C">&#9658; PLAY C</button>
+        <button class="select" data-track="C">PICK C</button>
+      </div>
+    </div>
+  </div>
+  <script src="js/chiptune.js"></script>
+  <script>
+    (function () {
+      var C = global.Chiptune;
+      var status = document.getElementById('status');
+      var bigplay = document.getElementById('bigplay');
+      var stopBtn = document.getElementById('stop');
+      var current = null;
+      var auto = null;
+      function stopAll() {
+        if (current) { C.stop(current.track); current = null; }
+        if (auto) { clearTimeout(auto); auto = null; }
+        syncUI(null);
+      }
+      function play(track) {
+        if (current && current.track === track) {
+          C.stop(track); current = null; syncUI(null); status.textContent = 'Stopped.'; return;
+        }
+        if (auto) { clearTimeout(auto); auto = null; }
+        if (current) C.stop(current.track);
+        C.start(track); current = { track: track };
+        status.textContent = 'Now playing: Option ' + track + ' — press STOP to stop.';
+        syncUI(track);
+      }
+      function syncUI(track) {
+        document.querySelectorAll('.card').forEach(function (c) {
+          c.classList.toggle('selected', c.dataset.track === track);
+          var pb = c.querySelector('.play');
+          pb.classList.toggle('playing', pb.dataset.track === track);
+          pb.innerHTML = (pb.dataset.track === track) ? '&#9632; STOP' : '&#9658; PLAY ' + pb.dataset.track;
+        });
+      }
+      document.querySelectorAll('.play').forEach(function (b) {
+        b.addEventListener('click', function () { play(b.dataset.track); });
+      });
+      document.querySelectorAll('.select').forEach(function (b) {
+        b.addEventListener('click', function () {
+          play(b.dataset.track);
+          status.textContent = 'You picked Option ' + b.dataset.track + ' — it\'s playing now. Let me know and I\'ll build it into the game!';
+        });
+      });
+      stopBtn.addEventListener('click', function () { stopAll(); status.textContent = 'Stopped.'; });
+      bigplay.addEventListener('click', function () {
+        if (auto) { stopAll(); status.textContent = 'Stopped the demo.'; return; }
+        var order = ['A', 'B', 'C'];
+        function next(i) {
+          if (current) C.stop(current.track);
+          C.start(order[i]); current = { track: order[i] };
+          status.textContent = 'Demo: playing Option ' + order[i] + ' of 3...';
+          syncUI(order[i]);
+          auto = setTimeout(function () { next((i + 1) % 3); }, 12000);
+        }
+        next(0);
+      });
+    })();
+  </script>
+</body>
+</html>
+

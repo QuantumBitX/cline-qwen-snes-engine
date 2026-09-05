@@ -1,4 +1,4 @@
-// ============================================================
+=====================================================
 //  SUPER PLUMBER BROS.  -  NES-era platformer (canvas + keyboard)
 // ============================================================
 (function (global) {
@@ -42,6 +42,26 @@
     };
   })();
 
+  // --- Music (chiptune background track) ---
+  const Music = (function () {
+    const TRACK = 'C'; // Cloud Drift (92 BPM, C major)
+    const VOL = 0.35;
+    let muted = false;
+    function ensure() { if (global.Chiptune) { global.Chiptune.setVolume(muted ? 0.001 : VOL); global.Chiptune.ensure(); } }
+    function start() { if (!muted && global.Chiptune) { global.Chiptune.setVolume(VOL); global.Chiptune.start(TRACK); } }
+    function stop() { if (global.Chiptune) global.Chiptune.stop(); }
+    function toggleMute() {
+      muted = !muted;
+      if (global.Chiptune) {
+        if (muted) { global.Chiptune.setVolume(0.001); global.Chiptune.stop(); }
+        else { global.Chiptune.setVolume(VOL); global.Chiptune.start(TRACK); }
+      }
+      return muted;
+    }
+    function isMuted() { return muted; }
+    return { ensure, start, stop, toggleMute, isMuted };
+  })();
+
   // --- state ---
   let grid, W, H, coins, enemies, mushrooms, coinPops, shards, bounces;
   let player, camX, score, coinsTotal, lives, timeLeft, timeFrame, frame = 0;
@@ -54,8 +74,9 @@
   global.addEventListener('keydown', (e) => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
     keys[e.code] = true;
-    if (e.code === 'Enter') { SFX.ensure(); if (state === 'title' || state === 'gameover' || state === 'win') startGame(); }
-    if (e.code === 'KeyP') { if (state === 'playing') paused = !paused; }
+    if (e.code === 'Enter') { SFX.ensure(); Music.ensure(); if (state === 'title' || state === 'gameover' || state === 'win') startGame(); }
+    if (e.code === 'KeyP') { if (state === 'playing') { paused = !paused; if (paused) Music.stop(); else Music.start(); } }
+    if (e.code === 'KeyM') { Music.toggleMute(); if (paused) Music.stop(); }
   });
   global.addEventListener('keyup', (e) => { keys[e.code] = false; });
   // --- level load / reset ---
@@ -71,7 +92,7 @@
   function resetPlayer() {
     player = { x: 2 * TILE, y: 13 * TILE - SMALL_H, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
   }
-  function startGame() { loadLevel(true); state = 'playing'; }
+  function startGame() { loadLevel(true); state = 'playing'; Music.start(); }
 
   // --- tile / geometry helpers ---
   function tileAt(tx, ty) { if (ty < 0 || ty >= H) return '.'; if (tx < 0 || tx >= W) return '#'; return grid[ty][tx]; }
@@ -192,10 +213,10 @@
     if (player.big) { player.big = false; player.y += (player.h - SMALL_H); player.h = SMALL_H; player.invuln = INVULN; SFX.shrink(); }
     else killPlayer();
   }
-  function killPlayer() { if (state !== 'playing') return; state = 'dying'; player.vy = -9; deathTimer = 0; SFX.die(); }
+  function killPlayer() { if (state !== 'playing') return; state = 'dying'; player.vy = -9; deathTimer = 0; SFX.die(); Music.stop(); }
   function updateDying() {
     deathTimer++; player.vy += GRAV_DOWN; if (player.vy > TERM_VY) player.vy = TERM_VY; player.y += player.vy;
-    if (player.y > VIEW_H + 120) { lives--; if (lives > 0) { loadLevel(false); state = 'playing'; } else state = 'gameover'; }
+    if (player.y > VIEW_H + 120) { lives--; if (lives > 0) { loadLevel(false); state = 'playing'; Music.start(); } else state = 'gameover'; }
   }
   // --- timer / camera / flag ---
   function updateTimer() { timeFrame++; if (timeFrame >= TIME_TICK) { timeFrame = 0; timeLeft--; if (timeLeft <= 0) { timeLeft = 0; killPlayer(); } } }
@@ -217,7 +238,7 @@
     } else {
       player.x += 0.6; player.facing = 1; if (player.x > flagX + 56) player.x = flagX + 56;
     }
-    if (completeTimer > 140) state = 'win';
+    if (completeTimer > 140) { state = 'win'; Music.stop(); }
   }
 
   // --- main update (one 60fps tick) ---
@@ -354,7 +375,7 @@
     ctx.fillStyle = '#fff'; ctx.font = '8px monospace';
     ctx.fillText('<  >  /  A D : move', 128, 184);
     ctx.fillText('SPACE / W / UP : jump (hold=higher)', 128, 196);
-    ctx.fillText('SHIFT / X : run    P : pause', 128, 208);
+    ctx.fillText('SHIFT / X : run    P : pause    M : mute', 128, 208);
     ctx.textAlign = 'left';
   }
   function overlay() { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
