@@ -51,7 +51,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `test.py` | Dev-container smoke test | ✅ done |
 | `.DS_Store`, `~$rio_Project_Summary.docx` | macOS + Word temp junk | 🗑️ safe to delete |
 
-> Only the initial v0 scaffold is committed. The two music files (`js/chiptune.js`, `music_options.html`) are **new and untracked** — commit them once the track is picked.
+> **Git:** Phase 0 is committed (`d633189` — ES-module refactor + both bug fixes + test harness). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
 
 ---
 
@@ -66,18 +66,18 @@ The focus is a **major engine upgrade**: bringing *Super Plumber Bros.* up to a 
 - **Asset pipeline** — PNG sprite-sheet atlas loader + a state-based animation controller (idle/run/skid/jump/fall by velocity + ground state + power-up).
 - **Rendering & juice** — data-driven multi-layer **parallax** scrolling (sky → mountains → hills → foreground-over-player) and a pooled **VFX** system (skid/land dust, coin-pop + score float, block-bounce sine displacement).
 
-**First things to confirm with the user (before any code):**
-1. Module system — ES modules (recommended) vs keep IIFEs.
-2. Logical resolution — 256×240 (recommended) vs 512×240 wide.
-3. Art — generate placeholder PNG sheets now vs wait for user-supplied art.
+**Open decisions — RESOLVED in Phase 0:**
+1. Module system → **ES modules** (native `<script type="module">`, no build step).
+2. Logical resolution → **256×240** (kept; zero disruption, matches current CSS scaling).
+3. Art → **keep the procedural canvas pixel-art as placeholder** (Phase 4 swaps in PNG sprite sheets).
 
-> **Minor still-pending item:** the chiptune **track choice (A/B/C)** from §4 is no longer the active task but is a quick follow-up whenever music integration is wanted. Details remain in §4–§6.
+> Music: track **C (Cloud Drift)** is the in-game default. Integration is **done** (see §6 — start on `Enter`/title, pause `P`, mute `M`; compare A/B/C in `music_options.html`).
 
 ---
 
 ## 4. How the music engine works (`js/chiptune.js`)
 
-Self-contained IIFE exposing `window.Chiptune = { start(track), stop(), tracks, ensure() }`. **No dependencies**, only `window` (so it can also run headless). Built to drop straight into the game.
+ES module exporting `Chiptune = { start(track), stop(), tracks, ensure(), setVolume(v) }`. **No dependencies**; uses `globalThis` so it also runs headless (the `test/` harness loads it without a browser).
 
 **Soundfont (NES-style):**
 - `pulse1` → **lead** (square, vol 0.16)
@@ -110,9 +110,11 @@ Original descriptions (for reference):
 
 ---
 
-## 6. Integration plan — wiring the chosen track into the game
+## 6. Music integration (✅ done in Phase 0)
 
-`js/chiptune.js` already exposes a ready API. Integration is a small, contained edit to `js/game.js`. **Exact hook points** (line numbers from the current file):
+Music is **wired in and working**: `js/game.js` wraps `Chiptune` in a `Music` IIFE and drives it from the state machine. **Default track `C` (Cloud Drift)** — starts on `Enter`/title, pause with `P`, mute with `M` (`Music.toggleMute`), stops on death/game-over/win. `Chiptune.setVolume(v)` was added, and the music master is held at **0.35** (below SFX) so jump/coin/stomp blips stay audible. Compare A/B/C standalone in `music_options.html`.
+
+The "plan" below was executed in Phase 0. ⚠️ The **line numbers it cites are now stale** (the file was restructured into ES modules) — refer to the `Music`, `SFX`, and `input.onKey` sections of `js/game.js` directly.
 
 - **Game states** (the `state` variable):
   - `'title'` — set at boot, `js/game.js:393`

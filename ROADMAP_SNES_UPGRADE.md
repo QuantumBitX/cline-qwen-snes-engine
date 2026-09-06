@@ -1,14 +1,15 @@
 # SNES "Super Mario World" Engine Upgrade — Roadmap
 
-> **Generated:** 2026-09-05 · **Status:** Plan (ready to execute once the 3 decisions below are confirmed)
+> **Generated:** 2026-09-05 · **Status:** ✅ **Phase 0 delivered & committed** (`d633189`) · Phases 1–7 pending (live checklist in `HANDOVER.md` §7)
 > Companion to `HANDOVER.md`. Step‑by‑step plan for upgrading *Super Plumber Bros.* from a NES‑era single‑layer platformer to a **data‑driven, 16‑bit‑style** engine.
-> ⚠️ This document is **plan‑only** — no game code was changed to produce it.
+> ⚠️ Originally a plan-only doc. **Phase 0 has since been executed** (ES-module refactor + 2 bug fixes + `test/` headless harness — commit `d633189`). Phases 1–7 remain planning.
 
 ---
 
 ## Scope & hard constraints
-- **No build step, no npm, no node runtime** — browser‑validated only. Serve with `python3 -m http.server 8000`, open `index.html`.
-- Keep plain `<script>` loading. **Recommended** move to **ES modules** (`<script type="module">`) — still no build step.
+- **No build step, no npm, no node runtime for the GAME** — it runs in the browser with zero deps. Serve with `python3 -m http.server 8000`, open `index.html`.
+  - *Dev-time relaxation (added in Phase 0):* a **Node test harness** (`npm test` → `test/harness.mjs`) validates behaviour headlessly. Dev tool only — the shipped game still needs no npm/node.
+- **ES modules** (`<script type="module">`) — adopted in Phase 0 (original plan: keep plain `<script>` + recommend modules). Still no build step.
 - Preserve the fixed **60 fps** timestep and the existing `js/chiptune.js` music engine.
 - The workspace path **contains a space** — always quote it in the shell.
 
@@ -51,7 +52,7 @@ js/
 
 ---
 
-## Phase 0 — Foundations & Groundwork
+## Phase 0 — Foundations & Groundwork ✅ DELIVERED
 *Goal: decouple the `game.js` monolith so later phases are isolated and testable. No gameplay change.*
 - Adopt **ES modules** (decision 1). Preserve an IIFE fallback path if preferred.
 - Extract `constants.js`, `input.js`, `loop.js`, `camera.js` out of `game.js`.
