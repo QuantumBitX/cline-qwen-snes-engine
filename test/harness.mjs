@@ -364,5 +364,100 @@ console.log('[phase 3 · integration]');
   G.startGame();
 }
 
+// ---- Phase 4: sprite sheet + animation controller ----
+console.log('[phase 4 · spritesheet]');
+{
+  const { computeFrames, SpriteSheet } = await import('../js/engine/spritesheet.js');
+  const frames = computeFrames(64, 32, 16, 16);
+  check('computeFrames: 64x32 / 16x16 → 8 frames', frames.length === 8, 'got ' + frames.length);
+  check('computeFrames: frame 0 at (0,0)', frames[0].sx === 0 && frames[0].sy === 0);
+  check('computeFrames: frame 1 at (16,0)', frames[1].sx === 16 && frames[1].sy === 0);
+  check('computeFrames: frame 3 at (48,0)', frames[3].sx === 48 && frames[3].sy === 0);
+  check('computeFrames: frame 4 at (0,16)', frames[4].sx === 0 && frames[4].sy === 16);
+  check('computeFrames: frame 7 at (48,16)', frames[7].sx === 48 && frames[7].sy === 16);
+  const gFrames = computeFrames(32, 16, 16, 16);
+  check('computeFrames: 32x16 / 16x16 → 2 frames', gFrames.length === 2);
+  check('computeFrames: goomba frame 1 at (16,0)', gFrames[1].sx === 16 && gFrames[1].sy === 0);
+  const nFrames = computeFrames(50, 30, 16, 16);
+  check('computeFrames: 50x30 / 16x16 → 3 frames (floor)', nFrames.length === 3, 'got ' + nFrames.length);
+  const sheet = new SpriteSheet('test.png', 16, 16);
+  check('SpriteSheet: not loaded before init', sheet.loaded === false);
+  sheet.init(64, 32);
+  check('SpriteSheet: loaded after init', sheet.loaded === true);
+  check('SpriteSheet: 8 frames after init(64,32)', sheet.frames.length === 8);
+  check('SpriteSheet: cellW=16 cellH=16', sheet.cellW === 16 && sheet.cellH === 16);
+  const gameCtx = b.canvas.getContext('2d');
+  sheet.draw(gameCtx, 0, 10, 20);
+  sheet.draw(gameCtx, 7, 10, 20);
+  sheet.draw(gameCtx, 8, 10, 20);
+  sheet.draw(gameCtx, 1, 10, 20, { flipX: true });
+  check('SpriteSheet.draw: no throw (including wrap + flip)', true);
+  check('game: playerSheet loaded', G.playerSheet.loaded === true);
+  check('game: playerSheet has 8 frames', G.playerSheet.frames.length === 8);
+  check('game: goombaSheet loaded', G.goombaSheet.loaded === true);
+  check('game: goombaSheet has 2 frames', G.goombaSheet.frames.length === 2);
+  check('game: mushroomSheet loaded', G.mushroomSheet.loaded === true);
+  check('game: mushroomSheet has 1 frame', G.mushroomSheet.frames.length === 1);
+}
+
+console.log('[phase 4 · animation]');
+{
+  const { pickPlayerState, AnimController } = await import('../js/engine/animation.js');
+  check('pickPlayerState: idle (onGround, vx=0)',
+    pickPlayerState({ onGround: true, vx: 0, vy: 0 }, 0) === 'idle');
+  check('pickPlayerState: idle (onGround, vx=0.1)',
+    pickPlayerState({ onGround: true, vx: 0.1, vy: 0 }, 0) === 'idle');
+  check('pickPlayerState: run (onGround, vx=1.5)',
+    pickPlayerState({ onGround: true, vx: 1.5, vy: 0 }, 1) === 'run');
+  check('pickPlayerState: run (onGround, vx=-1.5)',
+    pickPlayerState({ onGround: true, vx: -1.5, vy: 0 }, -1) === 'run');
+  check('pickPlayerState: run_fast (onGround, vx=3.0)',
+    pickPlayerState({ onGround: true, vx: 3.0, vy: 0 }, 1) === 'run_fast');
+  check('pickPlayerState: run_fast (onGround, vx=-2.5)',
+    pickPlayerState({ onGround: true, vx: -2.5, vy: 0 }, -1) === 'run_fast');
+  check('pickPlayerState: skid (moving right, input left)',
+    pickPlayerState({ onGround: true, vx: 2.0, vy: 0 }, -1) === 'skid');
+  check('pickPlayerState: skid (moving left, input right)',
+    pickPlayerState({ onGround: true, vx: -2.0, vy: 0 }, 1) === 'skid');
+  check('pickPlayerState: NOT skid (low speed, opposite input)',
+    pickPlayerState({ onGround: true, vx: 1.0, vy: 0 }, -1) !== 'skid');
+  check('pickPlayerState: jump (airborne, vy<0)',
+    pickPlayerState({ onGround: false, vx: 0, vy: -5 }, 0) === 'jump');
+  check('pickPlayerState: fall (airborne, vy>0)',
+    pickPlayerState({ onGround: false, vx: 0, vy: 5 }, 0) === 'fall');
+
+  const ac = new AnimController();
+  ac.update({ onGround: true, vx: 0, vy: 0 }, 0);
+  check('AnimController: starts in idle, frame 0', ac.state === 'idle' && ac.frame === 0);
+  ac.update({ onGround: true, vx: 1.5, vy: 0 }, 1);
+  check('AnimController: transitions to run', ac.state === 'run');
+  check('AnimController: run frame is 1 or 2', ac.frame === 1 || ac.frame === 2);
+  const runFrame0 = ac.frame;
+  for (let i = 0; i < 8; i++) ac.update({ onGround: true, vx: 1.5, vy: 0 }, 1);
+  check('AnimController: run frame advances after interval', ac.frame !== runFrame0);
+  ac.update({ onGround: true, vx: 3.0, vy: 0 }, 1);
+  check('AnimController: transitions to run_fast', ac.state === 'run_fast');
+  const fastFrame0 = ac.frame;
+  for (let i = 0; i < 4; i++) ac.update({ onGround: true, vx: 3.0, vy: 0 }, 1);
+  check('AnimController: run_fast advances in 4 ticks', ac.frame !== fastFrame0);
+  ac.update({ onGround: true, vx: 2.0, vy: 0 }, -1);
+  check('AnimController: skid state, frame 3', ac.state === 'skid' && ac.frame === 3);
+  ac.update({ onGround: false, vx: 1, vy: -5 }, 1);
+  check('AnimController: jump state, frame 4', ac.state === 'jump' && ac.frame === 4);
+  ac.update({ onGround: false, vx: 1, vy: 5 }, 1);
+  check('AnimController: fall state, frame 5', ac.state === 'fall' && ac.frame === 5);
+  ac.update({ onGround: true, vx: 0, vy: 0 }, 0);
+  check('AnimController: land after fall, frame 6', ac.state === 'land' && ac.frame === 6);
+  for (let i = 0; i < 6; i++) ac.update({ onGround: true, vx: 0, vy: 0 }, 0);
+  check('AnimController: back to idle after land timer', ac.state === 'idle');
+  ac.reset();
+  check('AnimController: reset → idle, frame 0', ac.state === 'idle' && ac.frame === 0);
+  G.startGame(); clearKeys(); b.advance(1);
+  check('game: playerAnim exists and has state', typeof G.playerAnim.state === 'string');
+  check('game: playerAnim.frame is a number 0-7',
+    G.playerAnim.frame >= 0 && G.playerAnim.frame < 8, 'frame=' + G.playerAnim.frame);
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
+

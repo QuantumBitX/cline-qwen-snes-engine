@@ -16,6 +16,8 @@ import { Sprites } from './sprites.js';
 import { loadLevelData, setLevelTransport } from './engine/level.js';
 import { createTilemap, bakeAutotile, ATLAS } from './engine/tilemap.js';
 import { Chiptune } from './chiptune.js';
+import { SpriteSheet } from './engine/spritesheet.js';
+import { AnimController } from './engine/animation.js';
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -72,6 +74,12 @@ import { Chiptune } from './chiptune.js';
   let player, camX, score, coinsTotal, lives, timeLeft, timeFrame, frame = 0;
   let state, deathTimer, completeTimer, flagX, flagBaseY, flagSlideDone = false;
   let paused = false, jumpHeld = false, jumpPressed = false;
+
+  // --- Phase 4: sprite sheets + animation controller ---
+  const playerSheet = new SpriteSheet('assets/sprites/player.png', 16, 16);
+  const goombaSheet = new SpriteSheet('assets/sprites/goomba.png', 16, 16);
+  const mushroomSheet = new SpriteSheet('assets/sprites/mushroom.png', 16, 16);
+  const playerAnim = new AnimController();
 
   // --- input + camera (engine/) ---
   const input = createInput(window);
@@ -260,7 +268,9 @@ import { Chiptune } from './chiptune.js';
     for (let i = coins.length - 1; i >= 0; i--) if (aabb(p, coins[i])) { coins.splice(i, 1); addCoin(1); addScore(200); SFX.coin(); }
 
     if (p.invuln > 0) p.invuln--;
-    p.anim += Math.abs(p.vx);
+    // Phase 4: advance the animation state machine
+    const inputDir = left ? -1 : right ? 1 : 0;
+    playerAnim.update(p, inputDir);
     checkEnemies(p, prevBottom);
     if (p.y > VIEW_H + 40) killPlayer();
   }
@@ -499,12 +509,31 @@ import { Chiptune } from './chiptune.js';
     ctx.beginPath(); ctx.moveTo(x - 1, fy); ctx.lineTo(x - 13, fy + 5); ctx.lineTo(x - 1, fy + 10); ctx.closePath(); ctx.fill();
   }
   function drawShards() { for (const s of shards) { ctx.fillStyle = '#c04a10'; ctx.fillRect(s.x - camX, s.y, 4, 4); ctx.fillStyle = '#7a2a08'; ctx.fillRect(s.x - camX, s.y + 3, 4, 1); } }
-  function drawMushrooms() { for (const m of mushrooms) drawSprite(Sprites.mushroom, m.x - camX + (m.w - Sprites.mushroom.width) / 2, m.y + m.h - Sprites.mushroom.height, false); }
+  function drawMushrooms() {
+    for (const m of mushrooms) {
+      if (mushroomSheet.loaded) {
+        mushroomSheet.draw(ctx, 0, m.x - camX + (m.w - 16) / 2, m.y + m.h - 16);
+      } else {
+        drawSprite(Sprites.mushroom, m.x - camX + (m.w - Sprites.mushroom.width) / 2, m.y + m.h - Sprites.mushroom.height, false);
+      }
+    }
+  }
   function drawEnemies() {
     for (const e of enemies) {
       const dx = e.x - camX - 1;
-      if (e.dead) { ctx.save(); ctx.translate(dx, e.y + e.h - 6); ctx.scale(1, 0.5); ctx.drawImage(Sprites.goomba, 0, 0); ctx.restore(); }
-      else drawSprite(Sprites.goomba, dx, e.y - 2, false);
+      if (goombaSheet.loaded) {
+        if (e.dead) {
+          ctx.save(); ctx.translate(Math.round(dx), e.y + e.h - 8); ctx.scale(1, 0.5);
+          goombaSheet.draw(ctx, 0, 0, 0);
+          ctx.restore();
+        } else {
+          const fi = (e.active && Math.abs(e.vx) > 0.1) ? ((frame >> 3) & 1) : 0;
+          goombaSheet.draw(ctx, fi, dx, e.y - 2, { flipX: e.vx > 0 });
+        }
+      } else {
+        if (e.dead) { ctx.save(); ctx.translate(dx, e.y + e.h - 6); ctx.scale(1, 0.5); ctx.drawImage(Sprites.goomba, 0, 0); ctx.restore(); }
+        else drawSprite(Sprites.goomba, dx, e.y - 2, false);
+      }
     }
   }
   function drawSprite(img, x, y, flip) {
@@ -514,9 +543,18 @@ import { Chiptune } from './chiptune.js';
   }
   function drawPlayer() {
     const p = player; if (p.invuln > 0 && (frame & 4)) return;
-    const img = p.big ? Sprites.marioBig : (p.onGround ? Sprites.marioSmall : Sprites.marioSmallJump);
-    const bob = (p.onGround && Math.abs(p.vx) > 0.2 && ((frame >> 2) & 1)) ? -1 : 0;
-    drawSprite(img, p.x - camX + (p.w - img.width) / 2, p.y + p.h - img.height + bob, p.facing < 0);
+    if (playerSheet.loaded) {
+      // Phase 4: draw from the PNG sprite sheet
+      const fi = playerAnim.frame;
+      const dx = p.x - camX + (p.w - 16) / 2;
+      const dy = p.y + p.h - 16;
+      playerSheet.draw(ctx, fi, dx, dy, { flipX: p.facing < 0 });
+    } else {
+      // Fallback: ASCII pixel-art
+      const img = p.big ? Sprites.marioBig : (p.onGround ? Sprites.marioSmall : Sprites.marioSmallJump);
+      const bob = (p.onGround && Math.abs(p.vx) > 0.2 && ((frame >> 2) & 1)) ? -1 : 0;
+      drawSprite(img, p.x - camX + (p.w - img.width) / 2, p.y + p.h - img.height + bob, p.facing < 0);
+    }
   }
 
   // --- HUD & screens ---
@@ -579,6 +617,15 @@ import { Chiptune } from './chiptune.js';
   }
   let levelData = await loadLevelData(LEVEL_URL);
 
+  // --- Phase 4: initialize sprite sheets (init in Node, load in browser) ---
+  if (isNode) {
+    playerSheet.init(64, 32);   // 4×2 grid of 16×16
+    goombaSheet.init(32, 16);   // 2×1 grid of 16×16
+    mushroomSheet.init(16, 16); // 1×1
+  } else {
+    await Promise.all([playerSheet.load(), goombaSheet.load(), mushroomSheet.load()]);
+  }
+
   // --- boot (fixed-timestep loop lives in engine/loop.js) ---
   state = 'title';
   loadLevel(true);
@@ -600,6 +647,11 @@ import { Chiptune } from './chiptune.js';
     get H() { return H; },
     get flagX() { return flagX; },
     get tilemap() { return tilemap; },
+    // Phase 4: sprite sheet + animation access
+    get playerSheet() { return playerSheet; },
+    get goombaSheet() { return goombaSheet; },
+    get mushroomSheet() { return mushroomSheet; },
+    get playerAnim() { return playerAnim; },
     startGame,
     // Phase 3 test hook: load a different level data object for testing
     loadTestLevel(data) { levelData = data; loadLevel(true); state = 'playing'; },
