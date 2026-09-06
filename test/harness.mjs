@@ -197,5 +197,49 @@ console.log('[phase 1 · loader + tilemap]');
     'src=' + String.fromCharCode(L.layers.collision[1 * 8 + 2]));
 }
 
+// ---- 10. PHASE 2: decorative autotiling (Moore-neighbour mask) ----
+console.log('[phase 2 · autotiling]');
+{
+  const { parseLevel } = await import('../js/engine/level.js');
+  const { createTilemap, bakeAutotile, ATLAS } = await import('../js/engine/tilemap.js');
+
+  // A 6x2 map that exercises every autotile feature:
+  //   row0: ##.###   (a notch in the top of the ground)
+  //   row1: ######   (solid base)
+  const raw = {
+    id: 'test', tileSize: 16, width: 6, height: 2,
+    layers: { collision: ['##.###', '######'] },
+    entities: [],
+  };
+  const tm = createTilemap(parseLevel(raw));
+  const at = bakeAutotile(tm);   // bakes into tm.autotile and returns the array
+  const cell = (x, y) => at[y * 6 + x];
+
+  check('autotile: is an Int16Array of w*h entries',
+    at instanceof Int16Array && at.length === 12, 'len=' + (at && at.length));
+  check('autotile: interior dirt has no features (bitmask 0)',
+    cell(1, 1) === ATLAS.dirt && cell(3, 1) === ATLAS.dirt && cell(4, 1) === ATLAS.dirt,
+    `cells ${cell(1, 1)},${cell(3, 1)},${cell(4, 1)}`);
+  check('autotile: flat grass cap where only N is empty',
+    cell(4, 0) === ATLAS.cap && cell(2, 1) === ATLAS.cap,
+    `cells ${cell(4, 0)},${cell(2, 1)} (expect ${ATLAS.cap})`);
+  check('autotile: lit left edge where only W is empty',
+    cell(0, 1) === ATLAS.edgeL, `cell ${cell(0, 1)} (expect ${ATLAS.edgeL})`);
+  check('autotile: dark right edge where only E is empty',
+    cell(5, 1) === ATLAS.edgeR, `cell ${cell(5, 1)} (expect ${ATLAS.edgeR})`);
+  check('autotile: top-left corner = cap|edgeL|cornerTL',
+    cell(0, 0) === (ATLAS.cap | ATLAS.edgeL | ATLAS.cornerTL) &&
+    cell(3, 0) === (ATLAS.cap | ATLAS.edgeL | ATLAS.cornerTL),
+    `cells ${cell(0, 0)},${cell(3, 0)} (expect ${ATLAS.cap | ATLAS.edgeL | ATLAS.cornerTL})`);
+  check('autotile: top-right corner = cap|edgeR|cornerTR',
+    cell(1, 0) === (ATLAS.cap | ATLAS.edgeR | ATLAS.cornerTR) &&
+    cell(5, 0) === (ATLAS.cap | ATLAS.edgeR | ATLAS.cornerTR),
+    `cells ${cell(1, 0)},${cell(5, 0)} (expect ${ATLAS.cap | ATLAS.edgeR | ATLAS.cornerTR})`);
+  check('autotile: non-ground tiles are 0', cell(2, 0) === 0, `cell ${cell(2, 0)}`);
+  check('autotile: does not mutate the collision layer',
+    tm.tileAt(2, 0) === '.' && tm.tileAt(0, 1) === '#',
+    `tileAt(2,0)=${tm.tileAt(2, 0)} tileAt(0,1)=${tm.tileAt(0, 1)}`);
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
