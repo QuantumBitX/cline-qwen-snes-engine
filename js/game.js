@@ -161,7 +161,7 @@ import { Chiptune } from './chiptune.js';
       // Solid surfaces (flat + slopes)
       for (const px of [xL, xR]) {
         const gy = tilemap.surfaceYAt(px, bottomY);
-        if (gy !== null && gy >= prevBottom - 0.01 && gy <= bottomY + 0.01) {
+        if (gy !== null && gy >= prevBottom - 0.01 && gy <= bottomY + MAX_STEP_UP) {
           if (bestSurface === null || gy < bestSurface) bestSurface = gy;
         }
       }
@@ -220,21 +220,26 @@ import { Chiptune } from './chiptune.js';
     const run = input.held.ShiftLeft || input.held.ShiftRight || input.held.KeyX;
     const downHeld = input.held.ArrowDown || input.held.KeyS;
     const maxS = run ? MAX_RUN : MAX_WALK, acc = run ? ACCEL_RUN : ACCEL_WALK;
+    const idle = !left && !right;
     if (left && !right) { p.vx -= acc; p.facing = -1; }
     else if (right && !left) { p.vx += acc; p.facing = 1; }
-    else { if (p.vx > 0) p.vx = Math.max(0, p.vx - FRIC_GROUND); else if (p.vx < 0) p.vx = Math.min(0, p.vx + FRIC_GROUND); }
-    p.vx = clamp(p.vx, -maxS, maxS);
-    if (!left && !right && Math.abs(p.vx) < 0.05) p.vx = 0;
 
     // Phase 3: slope slide — nudge downhill when idle on a slope
-    if (p.onGround && p.vx === 0) {
+    let slopeSlide = 0;
+    if (p.onGround && idle) {
       const feetY = p.y + p.h;
       const gyL = tilemap.surfaceYAt(p.x + 1, feetY);
       const gyR = tilemap.surfaceYAt(p.x + p.w - 1, feetY);
       if (gyL !== null && gyR !== null && gyL !== gyR) {
-        p.vx += (gyL > gyR) ? -SLOPE_ACCEL : SLOPE_ACCEL;
+        slopeSlide = (gyL > gyR) ? -SLOPE_ACCEL : SLOPE_ACCEL;
       }
     }
+    if (idle) {
+      if (slopeSlide !== 0) { p.vx += slopeSlide; }
+      else { if (p.vx > 0) p.vx = Math.max(0, p.vx - FRIC_GROUND); else if (p.vx < 0) p.vx = Math.min(0, p.vx + FRIC_GROUND); }
+    }
+    p.vx = clamp(p.vx, -maxS, maxS);
+    if (idle && slopeSlide === 0 && Math.abs(p.vx) < 0.05) p.vx = 0;
 
     // Phase 3: drop-through (Down + Jump on a one-way platform)
     if (downHeld && jumpPressed && p.onGround && p.onOneWay) {
@@ -572,7 +577,7 @@ import { Chiptune } from './chiptune.js';
   } else {
     setLevelTransport((url) => fetch(url).then((r) => { if (!r.ok) throw new Error('level fetch failed: ' + url); return r.json(); }));
   }
-  const levelData = await loadLevelData(LEVEL_URL);
+  let levelData = await loadLevelData(LEVEL_URL);
 
   // --- boot (fixed-timestep loop lives in engine/loop.js) ---
   state = 'title';

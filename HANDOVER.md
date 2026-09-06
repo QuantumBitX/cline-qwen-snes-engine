@@ -1,13 +1,15 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-06. Branch: `master`. **Phases 0, 1 and 2 of the SNES upgrade are complete and committed.**
+> Last updated: 2026-09-06. Branch: `master`. **Phases 0, 1, 2, and 3 of the SNES upgrade are complete and committed.**
 > Phase 0: ES-module refactor + both §5 bugs fixed + headless Node test harness. Phase 1: 3-layer JSON level
 > format + loader + tilemap query API, World 1-1 migrated to `assets/levels/w1-1.json`, and the game switched
 > to the JSON path (verified 1:1 by grid-diff + harness). Phase 2: decorative autotiling — `#`/`=` ground now
 > renders as organic terrain (grass cap, dirt body, lit/dark cliff edges, rounded corners) via a Moore-neighbour
-> mask baked once at load (render-only; collision untouched). Node 22 is now installed.
-> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 3 — slope physics & semi-solids).**
+> mask baked once at load (render-only; collision untouched). Phase 3: per-tile slope physics (45° `/` `\` with
+> step-up + downhill slide) and one-way platforms (`-` with drop-through) — collision rewritten as a height-field
+> in `game.js`, 22 new harness checks, test level `w1-1-slopes.json`. Node 22 is now installed.
+> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 4 — sprite sheets + animation controller).**
 
 ---
 
@@ -39,18 +41,19 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `style.css` | Layout + pixelated scaling | ✅ done (tracked) |
 | `js/sprites.js` (144 ln) | Pixel-art sprite data → offscreen canvases | ✅ done (tracked) |
 | `js/level.js` (85 ln) | World 1-1 as feature placements — **now only the source for the Phase 1 generator + harness baseline**; the running game no longer imports it | ✅ legacy (Phase 1) |
-| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/`; **loads the level from `assets/levels/w1-1.json`**; **renders autotiled ground** | ✅ refactored (Phase 0) + **JSON level path (Phase 1)** + **autotile render (Phase 2)** |
-| `js/engine/constants.js` | **NEW** all tunables (view/physics/camera) in one place | ✅ Phase 0 |
+| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/`; **loads the level from `assets/levels/w1-1.json`**; **renders autotiled ground**; **height-field collision (Phase 3)** | ✅ Phase 0 + **Phase 1** + **Phase 2** + **Phase 3** |
+| `js/engine/constants.js` | **NEW** all tunables (view/physics/camera/**collision**) in one place | ✅ Phase 0 + **Phase 3** |
 | `js/engine/input.js` | **NEW** keyboard state + jump edge detection | ✅ Phase 0 |
 | `js/engine/loop.js` | **NEW** fixed 60fps timestep | ✅ Phase 0 |
 | `js/engine/camera.js` | **NEW** smooth look-ahead follow + safety clamp | ✅ Phase 0 (bug #2) |
 | `js/engine/level.js` | **NEW** 3-layer JSON parser (`parseLevel`) + injectable transport (`setLevelTransport`) + `loadLevelData` | ✅ Phase 1 |
-| `js/engine/tilemap.js` | **NEW** `createTilemap` — typed-array collision grid with `tileAt`/`solidAt`/`isGround`/`set`/`rows` + **`bakeAutotile` + `ATLAS` feature bits (Phase 2)** | ✅ Phase 1 + **autotile (Phase 2)** |
+| `js/engine/tilemap.js` | **NEW** `createTilemap` — typed-array collision grid with `tileAt`/`solidAt`/`isGround`/`set`/`rows` + **`bakeAutotile` + `ATLAS` (Phase 2)** + **`slope`/`isOneWay`/`surfaceYAt` (Phase 3)** | ✅ Phase 1 + Phase 2 + **Phase 3** |
 | `js/chiptune.js` (284 ln) | NES-style sequencer + 3 original tracks (now an ES-module export) | ✅ done |
-| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs (**48 checks**, incl. Phase 1 loader/tilemap + Phase 2 autotile mask) | ✅ Phase 0 + Phase 1 + Phase 2 |
+| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs (**70 checks**, incl. Phase 1 loader/tilemap + Phase 2 autotile + Phase 3 slope/one-way) | ✅ Phase 0 + Phase 1 + Phase 2 + Phase 3 |
 | `package.json` | **NEW** `{"type":"module"}` + `npm test` (no deps/build) | ✅ Phase 0 |
 | `assets/levels/README.md` | **NEW** 3-layer JSON level format spec (background/collision/foreground) | ✅ Phase 1 |
 | `assets/levels/w1-1.json` | **NEW** World 1-1 as JSON (migrated 1:1 from `buildLevel`) | ✅ Phase 1 |
+| `assets/levels/w1-1-slopes.json` | **NEW** test level with `/` `\` slopes + `-` one-way platforms (Phase 3 physics) | ✅ Phase 3 |
 | `tools/generate-w1-1.mjs` | **NEW** dev tool: regenerate `w1-1.json` from `buildLevel()` | ✅ Phase 1 |
 | `tools/grid-diff.mjs` | **NEW** dev tool: assert the JSON-derived grid == `buildLevel()` grid (byte-identical) | ✅ Phase 1 |
 | `tools/browser-smoke.mjs` | **NEW** dev tool: force the browser fetch branch, boot the game, verify the player moves | ✅ Phase 1 |
@@ -62,7 +65,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `test.py` | Dev-container smoke test | ✅ done |
 | `.DS_Store`, `~$rio_Project_Summary.docx` | macOS + Word temp junk | 🗑️ safe to delete |
 
-> **Git:** Phase 0 is committed (`d633189`), Phase 1 in three commits (`4578a46` format+loader+tilemap, `b099b59` w1-1.json migration, `7a8a3de` game switched to the JSON path), and Phase 2 in four commits (`9bc477d` autotile core, `76c7542` harness checks, `52231d5` autotile render, + this docs commit). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
+> **Git:** Phase 0 is committed (`d633189`), Phase 1 in three commits (`4578a46` format+loader+tilemap, `b099b59` w1-1.json migration, `7a8a3de` game switched to the JSON path), Phase 2 in four commits (`9bc477d` autotile core, `76c7542` harness checks, `52231d5` autotile render, + this docs commit), and Phase 3 in two commits (`Phase 3 (1/4): slope height-field collision + one-way platforms` + `Phase 3 (2/4): test level + harness tests + docs`). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
 
 ---
 
@@ -70,18 +73,21 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 
 The focus is a **major engine upgrade**: bringing *Super Plumber Bros.* up to a **16-bit SNES / Super Mario World** standard. A complete, phased plan is in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7).
 
-**Status: Phases 0, 1 and 2 are complete and committed.** The codebase is pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera / **level** / **tilemap**), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, **48 checks**) that runs the real game module and validates behaviour. Phase 1 added the **3-layer JSON level format** + loader + tilemap query API, migrated World 1-1 to `assets/levels/w1-1.json`, and switched the running game to load from JSON (verified 1:1 by `tools/grid-diff.mjs` + the harness). **Phase 2 (decorative autotiling)** added `bakeAutotile` + `ATLAS` to `tilemap.js` and made `#`/`=` ground render as organic terrain (grass cap, dirt body, lit/dark cliff edges, rounded corners) — a **render-only** change verified by 9 new harness checks on the baked mask, with `tools/grid-diff.mjs` still reporting GRID 1:1 OK (collision unchanged). **Phase 3 (slope physics & semi-solids) is next.**
+**Status: Phases 0, 1, 2, and 3 are complete and committed.** The codebase is pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera / **level** / **tilemap**), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, **70 checks**) that runs the real game module and validates behaviour. Phase 1 added the **3-layer JSON level format** + loader + tilemap query API, migrated World 1-1 to `assets/levels/w1-1.json`, and switched the running game to load from JSON (verified 1:1 by `tools/grid-diff.mjs` + the harness). **Phase 2 (decorative autotiling)** added `bakeAutotile` + `ATLAS` to `tilemap.js` and made `#`/`=` ground render as organic terrain — a **render-only** change verified by 9 new harness checks, with `tools/grid-diff.mjs` still reporting GRID 1:1 OK. **Phase 3 (slope physics & semi-solids)** rewrote the collision in `game.js` as a per-tile height-field: 45° `/` `\` slopes with step-up (≤ 8px auto-climb) + downhill slide, and `-` one-way platforms with drop-through (Down+Jump). Verified by 22 new harness checks (tilemap unit + integration) and a dedicated test level `w1-1-slopes.json`. **Phase 4 (sprite sheets + animation controller) is next.**
 
 **Scope of the roadmap:**
 - **Engine & physics** — data-driven multi-layer JSON tilemaps (`background`/`collision`/`foreground`), decorative autotiling (grass/dirt/corners), and a new **slope + one-way-platform physics** core (45° & 22.5° slopes via a per-tile height field).
 - **Asset pipeline** — PNG sprite-sheet atlas loader + a state-based animation controller (idle/run/skid/jump/fall by velocity + ground state + power-up).
 - **Rendering & juice** — data-driven multi-layer **parallax** scrolling (sky → mountains → hills → foreground-over-player) and a pooled **VFX** system (skid/land dust, coin-pop + score float, block-bounce sine displacement).
-### Phase 3 kickoff — slope physics & semi-solids
-Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 3" (per-tile height field + step-up + one-way platforms). Concrete starting points for this codebase:
-1. **New chars** — add `/` `\` (solid slopes) + `-` (one-way platform) to the `assets/levels/README.md` legend. `engine/level.js` already passes any char through to the collision buffer, so **no loader change** is needed for the new chars.
-2. **Collision** — replace the flat `move()` / `resolveX` / `resolveY` in `js/game.js` (search `function move(`) with a per-tile height-field: `step-up` (≤ half-tile auto-climb), `slope slide` (steepness from neighbour heights), `one-way` (solid only when falling **and** feet were above the top). **Decision to make:** keep the logic in `game.js` (least churn, matches the roadmap's "replace the flat resolve in js/game.js") or extract a new `js/engine/collision.js` (matches the roadmap end-state structure). Prefer the smaller change unless the extraction is clean.
-3. **Render** — slope silhouettes (dirt fill under the diagonal) + one-way plank (2px top bar). Keep the Phase 2 autotile path for flat `#`/`=`.
-4. **⚠️ grid-diff gotcha** — `tools/grid-diff.mjs` compares the *collision* layer, so adding **solid** slope chars to `w1-1.json` breaks the 1:1 baseline. Safest: add slopes/one-ways to a **new** test level first (keep `w1-1.json` pristine until the physics is verified), or extend the grid-diff baseline. Add step-up / slope / one-way checks to `test/harness.mjs` (there's already a tilemap/autotile section to extend).
+### Phase 3 — slope physics & semi-solids ✅ DONE
+Implemented: `/` `\` (45° solid slopes) + `-` (one-way platform) in the collision height-field. Key design decisions:
+- Collision logic kept in `game.js` (smaller change than extracting `collision.js`)
+- `surfaceYAt(x, probeY)` interpolates between `hL`/`hR` per tile for smooth slope landing
+- One-way detection uses `prevBottom <= ty*TILE` (feet were above platform top last frame)
+- Slope slide skips friction when active (so velocity accumulates downhill)
+- Y-resolution tolerance uses `MAX_STEP_UP` (8px) to handle step-up + slope interaction
+- `w1-1.json` left pristine to preserve grid-diff baseline; test level `w1-1-slopes.json` exercises new physics
+- 22 new harness checks (13 tilemap unit + 9 integration)
 
 
 
@@ -172,7 +178,7 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 2. [x] **Phase 0** — split `game.js` into `js/engine/` modules, centralised constants in `engine/constants.js`, **fixed both §5 bugs**, added the headless `test/harness.mjs`.
 3. [x] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour, verified by grid-diff + harness). ✅ done (commits `4578a46`, `b099b59`, `7a8a3de`).
 4. [x] **Phase 2** — decorative autotiling: `bakeAutotile` + `ATLAS` in `tilemap.js`, `#`/`=` ground renders as organic terrain (grass cap / dirt / lit+dark cliff edges / rounded corners); render-only, collision unchanged (9 new harness checks + grid-diff still 1:1). ✅ done (commits `9bc477d`, `76c7542`, `52231d5`).
-5. [ ] **Phase 3** — the slope / one-way physics core (per-tile height field + semi-solids).
+5. [x] **Phase 3** — slope / one-way physics core (per-tile height field + semi-solids). ✅ done — 45° `/` `\` slopes with step-up + slide, `-` one-way platforms with drop-through, 22 new harness checks, test level `w1-1-slopes.json`.
 6. [ ] **Phase 4–6** (any order) — sprite sheets + animation controller, parallax, VFX.
 7. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
 8. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).

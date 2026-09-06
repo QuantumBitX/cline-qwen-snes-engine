@@ -241,5 +241,128 @@ console.log('[phase 2 · autotiling]');
     `tileAt(2,0)=${tm.tileAt(2, 0)} tileAt(0,1)=${tm.tileAt(0, 1)}`);
 }
 
+// ---- 11. PHASE 3: slope + one-way physics ----
+console.log('[phase 3 · slopes + one-way]');
+{
+  const { parseLevel } = await import('../js/engine/level.js');
+  const { createTilemap } = await import('../js/engine/tilemap.js');
+
+  // --- tilemap unit tests: slope() + isOneWay() + surfaceYAt() ---
+  const raw = {
+    id: 'slope-test', tileSize: 16, width: 8, height: 4,
+    layers: { collision: ['........', '........', '.../\\-..', '########'] },
+    entities: [],
+  };
+  const tm = createTilemap(parseLevel(raw));
+  check('slope: / tile returns {hL:16,hR:0}',
+    JSON.stringify(tm.slope(3, 2)) === JSON.stringify({ hL: 16, hR: 0 }),
+    'got ' + JSON.stringify(tm.slope(3, 2)));
+  check('slope: \\ tile returns {hL:0,hR:16}',
+    JSON.stringify(tm.slope(4, 2)) === JSON.stringify({ hL: 0, hR: 16 }),
+    'got ' + JSON.stringify(tm.slope(4, 2)));
+  check('slope: flat # returns {hL:0,hR:0}',
+    JSON.stringify(tm.slope(0, 3)) === JSON.stringify({ hL: 0, hR: 0 }));
+  check('slope: empty returns null', tm.slope(0, 0) === null);
+  check('slope: one-way returns null', tm.slope(5, 2) === null);
+  check('isOneWay: - tile is true', tm.isOneWay(5, 2) === true);
+  check('isOneWay: # tile is false', tm.isOneWay(0, 3) === false);
+  check('surfaceYAt: flat ground at tile top',
+    tm.surfaceYAt(8, 52) === 48, `got ${tm.surfaceYAt(8, 52)}`);
+  check('surfaceYAt: / slope left edge = tile bottom',
+    Math.abs(tm.surfaceYAt(48.01, 33) - 48) < 1, `got ${tm.surfaceYAt(48.01, 33)}`);
+  check('surfaceYAt: / slope right edge = tile top',
+    Math.abs(tm.surfaceYAt(63.99, 33) - 32) < 1, `got ${tm.surfaceYAt(63.99, 33)}`);
+  check('surfaceYAt: / slope mid = interpolated',
+    Math.abs(tm.surfaceYAt(56, 33) - 40) < 0.1, `got ${tm.surfaceYAt(56, 33)}`);
+  check('surfaceYAt: empty returns null', tm.surfaceYAt(8, 8) === null);
+  check('surfaceYAt: one-way returns null', tm.surfaceYAt(88, 33) === null);
+}
+
+// ---- 12. PHASE 3: integration (slope level physics) ----
+console.log('[phase 3 · integration]');
+{
+  const { parseLevel } = await import('../js/engine/level.js');
+  const slopeLevel = parseLevel({
+    id: 'w1-1-slopes', tileSize: 16, width: 40, height: 15,
+    layers: { collision: [
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '........................................',
+      '....................----................',
+      '........................................',
+      '...../....\\.............................',
+      '########################################',
+      '########################################',
+    ]},
+    entities: [{ type: 'flag', x: 616, baseRow: 13, topRow: 5 }],
+  });
+  G.loadTestLevel(slopeLevel);
+  clearKeys();
+  b.advance(1);
+  const p = G.player;
+
+  // Test: slope walking (player walks up the / slope at col 5)
+  p.x = 64; p.y = 194; p.vx = 0; p.vy = 0; p.onGround = true;
+  b.advance(1);
+  const yBefore = p.y;
+  b.press('ArrowRight'); b.advance(8); b.release('ArrowRight');
+  check('slope: walking up / slope raises the player',
+    p.y < yBefore, `y ${yBefore} -> ${p.y}`);
+  check('slope: player on ground after walking up', p.onGround === true);
+
+  // Test: slope slide (idle on the \ slope at col 10, slides right)
+  clearKeys();
+  p.x = 164; p.y = 183; p.vx = 0; p.vy = 0; p.onGround = true;
+  b.advance(1);
+  const vx0 = p.vx;
+  b.advance(2);
+  check('slope slide: idle on \\ slope gains rightward vx',
+    p.vx > vx0 + 0.1, `vx ${vx0} -> ${p.vx}`);
+
+  // Test: one-way platform landing
+  clearKeys();
+  p.x = 340; p.y = 100; p.vx = 0; p.vy = 0; p.onGround = false; p.dropTimer = 0;
+  b.advance(30);
+  check('one-way: player lands on - platform',
+    p.onGround === true && p.onOneWay === true,
+    `onGround=${p.onGround} onOneWay=${p.onOneWay} feet=${p.y + p.h}`);
+  check('one-way: feet at platform top (Y=160)',
+    Math.abs(p.y + p.h - 160) < 1, `feet=${p.y + p.h}`);
+
+  // Test: one-way jump-through (jump from below passes through)
+  clearKeys();
+  p.x = 340; p.y = 194; p.vx = 0; p.vy = 0; p.onGround = true; p.dropTimer = 0;
+  b.advance(1);
+  b.press('Space'); b.advance(8);
+  const feetMid = p.y + p.h;
+  b.release('Space'); b.advance(60);
+  check('one-way jump-through: rises above platform top',
+    feetMid < 162, `feet mid-jump=${feetMid}`);
+  check('one-way jump-through: lands back on the one-way platform',
+    p.onGround === true && p.onOneWay === true, `y=${p.y} onOneWay=${p.onOneWay}`);
+
+  // Test: drop-through (Down+Jump on one-way)
+  clearKeys();
+  p.x = 340; p.y = 146; p.vx = 0; p.vy = 0; p.onGround = true; p.onOneWay = true; p.dropTimer = 0;
+  b.advance(1);
+  b.press('ArrowDown'); b.press('Space'); b.advance(1);
+  b.release('Space'); b.release('ArrowDown');
+  b.advance(30);
+  check('drop-through: player falls below platform',
+    p.y + p.h > 160, `feet=${p.y + p.h}`);
+  check('drop-through: lands on ground below',
+    p.onGround === true, `onGround=${p.onGround} y=${p.y}`);
+
+  // Restore w1-1
+  G.startGame();
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

@@ -71,10 +71,13 @@ images). Only `collision` is required.
 | `U` | used block | solid |
 | `Q` / `W` | pipe cap, left / right | solid |
 | `E` / `R` | pipe body, left / right | solid |
+| `/` | slope up-right (45°) | solid, height-field (hL=16, hR=0) |
+| `\` | slope up-left (45°) | solid, height-field (hL=0, hR=16) |
+| `-` | one-way platform | semi-solid (only when falling from above) |
 
-Reserved for later phases (ignored by the 1-1 collision rules, kept for the
-shared legend): `=` ground filler (Phase 2 autotile), `/` `\` `~` `^` slopes
-and `_` one-way platforms (Phase 3 physics), `o` hard-block alias.
+Reserved for later phases (ignored by the current collision rules, kept for the
+shared legend): `=` ground filler (Phase 2 autotile), `~` `^` small slopes
+(22.5°), `o` hard-block alias.
 
 ## Entities (pixel-anchored)
 
