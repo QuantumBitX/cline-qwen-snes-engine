@@ -1,9 +1,11 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-05. Branch: `master`. **Phase 0 of the SNES upgrade is complete and committed**
-> (ES-module refactor + both §5 bugs fixed + headless Node test harness). Node 22 is now installed.
-> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 1).**
+> Last updated: 2026-09-06. Branch: `master`. **Phase 0 and Phase 1 of the SNES upgrade are complete and committed.**
+> Phase 0: ES-module refactor + both §5 bugs fixed + headless Node test harness. Phase 1: 3-layer JSON level
+> format + loader + tilemap query API, World 1-1 migrated to `assets/levels/w1-1.json`, and the game switched
+> to the JSON path (verified 1:1 by grid-diff + harness). Node 22 is now installed.
+> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 2 — decorative autotiling).**
 
 ---
 
@@ -34,15 +36,22 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `index.html` | Canvas + control hints + **script order** | ✅ done (tracked) |
 | `style.css` | Layout + pixelated scaling | ✅ done (tracked) |
 | `js/sprites.js` (144 ln) | Pixel-art sprite data → offscreen canvases | ✅ done (tracked) |
-| `js/level.js` (85 ln) | Level 1-1 as feature placements | ✅ done (tracked) |
-| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/` | ✅ refactored (Phase 0) — **§5 bugs fixed** |
+| `js/level.js` (85 ln) | World 1-1 as feature placements — **now only the source for the Phase 1 generator + harness baseline**; the running game no longer imports it | ✅ legacy (Phase 1) |
+| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/`; **loads the level from `assets/levels/w1-1.json`** | ✅ refactored (Phase 0) + **JSON level path (Phase 1)** |
 | `js/engine/constants.js` | **NEW** all tunables (view/physics/camera) in one place | ✅ Phase 0 |
 | `js/engine/input.js` | **NEW** keyboard state + jump edge detection | ✅ Phase 0 |
 | `js/engine/loop.js` | **NEW** fixed 60fps timestep | ✅ Phase 0 |
 | `js/engine/camera.js` | **NEW** smooth look-ahead follow + safety clamp | ✅ Phase 0 (bug #2) |
+| `js/engine/level.js` | **NEW** 3-layer JSON parser (`parseLevel`) + injectable transport (`setLevelTransport`) + `loadLevelData` | ✅ Phase 1 |
+| `js/engine/tilemap.js` | **NEW** `createTilemap` — typed-array collision grid with `tileAt`/`solidAt`/`set`/`rows` | ✅ Phase 1 |
 | `js/chiptune.js` (284 ln) | NES-style sequencer + 3 original tracks (now an ES-module export) | ✅ done |
-| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs | ✅ Phase 0 |
+| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs (**39 checks**, incl. Phase 1 loader/tilemap) | ✅ Phase 0 + Phase 1 |
 | `package.json` | **NEW** `{"type":"module"}` + `npm test` (no deps/build) | ✅ Phase 0 |
+| `assets/levels/README.md` | **NEW** 3-layer JSON level format spec (background/collision/foreground) | ✅ Phase 1 |
+| `assets/levels/w1-1.json` | **NEW** World 1-1 as JSON (migrated 1:1 from `buildLevel`) | ✅ Phase 1 |
+| `tools/generate-w1-1.mjs` | **NEW** dev tool: regenerate `w1-1.json` from `buildLevel()` | ✅ Phase 1 |
+| `tools/grid-diff.mjs` | **NEW** dev tool: assert the JSON-derived grid == `buildLevel()` grid (byte-identical) | ✅ Phase 1 |
+| `tools/browser-smoke.mjs` | **NEW** dev tool: force the browser fetch branch, boot the game, verify the player moves | ✅ Phase 1 |
 | `music_options.html` (138 ln) | **NEW** standalone page to listen to & pick a track | ✅ done (untracked) |
 | `ROADMAP_SNES_UPGRADE.md` | **NEW** full SNES‑engine upgrade roadmap (Phase 0–7) | 📋 plan — see §3 |
 | `README.md` | Project overview / run instructions | ✅ done |
@@ -51,7 +60,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `test.py` | Dev-container smoke test | ✅ done |
 | `.DS_Store`, `~$rio_Project_Summary.docx` | macOS + Word temp junk | 🗑️ safe to delete |
 
-> **Git:** Phase 0 is committed (`d633189` — ES-module refactor + both bug fixes + test harness). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
+> **Git:** Phase 0 is committed (`d633189`), Phase 1 in three commits (`4578a46` format+loader+tilemap, `b099b59` w1-1.json migration, `7a8a3de` game switched to the JSON path). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
 
 ---
 
@@ -59,7 +68,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 
 The focus is a **major engine upgrade**: bringing *Super Plumber Bros.* up to a **16-bit SNES / Super Mario World** standard. A complete, phased plan is in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7).
 
-**Status: Phase 0 is complete and committed.** The codebase is now pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, 20 assertions) that runs the real game module and validates behaviour. **Phase 1 (JSON levels) is next.**
+**Status: Phase 0 and Phase 1 are complete and committed.** The codebase is pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera / **level** / **tilemap**), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, **39 checks**) that runs the real game module and validates behaviour. Phase 1 added the **3-layer JSON level format** + loader + tilemap query API, migrated World 1-1 to `assets/levels/w1-1.json`, and switched the running game to load from JSON (verified 1:1 by `tools/grid-diff.mjs` + the harness). **Phase 2 (decorative autotiling) is next.**
 
 **Scope of the roadmap:**
 - **Engine & physics** — data-driven multi-layer JSON tilemaps (`background`/`collision`/`foreground`), decorative autotiling (grass/dirt/corners), and a new **slope + one-way-platform physics** core (45° & 22.5° slopes via a per-tile height field).
@@ -151,7 +160,7 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 ## 7. Immediate next steps (in order)
 1. [x] **Confirm the 3 open decisions** — chose: **ES modules**, **256×240** (no disruption), **keep existing canvas pixel-art as placeholder art** (Phase 4 swaps in PNG sheets).
 2. [x] **Phase 0** — split `game.js` into `js/engine/` modules, centralised constants in `engine/constants.js`, **fixed both §5 bugs**, added the headless `test/harness.mjs`.
-3. [ ] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour, verified by grid-diff + harness).
+3. [x] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour, verified by grid-diff + harness). ✅ done (commits `4578a46`, `b099b59`, `7a8a3de`).
 4. [ ] **Phase 2 → 3** — autotiling, then the slope / one-way physics core.
 5. [ ] **Phase 4–6** (any order) — sprite sheets + animation controller, parallax, VFX.
 6. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
