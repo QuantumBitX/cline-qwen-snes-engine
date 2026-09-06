@@ -45,5 +45,10 @@ export const CAM_LOOKAHEAD = 24;
 export const CAM_MAX_STEP = 5;
 export const CAM_MARGIN = 8;         // hard safety band so the player is always visible
 
+// --- collision (Phase 3: slope + one-way) ---
+export const MAX_STEP_UP = 8;        // px: auto-climb threshold (half a tile)
+export const SLOPE_ACCEL = 0.15;     // px/frame² downhill nudge on slopes
+export const DROP_TIMER = 10;        // frames to ignore one-ways after Down+Jump
+
 // --- loop ---
 export const STEP = 1000 / 60;       // fixed 60fps logic timestep (ms)

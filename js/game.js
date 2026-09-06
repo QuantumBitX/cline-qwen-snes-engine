@@ -7,6 +7,7 @@ import {
   MAX_WALK, MAX_RUN, ACCEL_WALK, ACCEL_RUN, FRIC_GROUND,
   STOMP, STOMP_HOLD, STOMP_TOL,
   PLAYER_W as PW, SMALL_H, BIG_H, INVULN, START_TIME, TIME_TICK,
+  MAX_STEP_UP, SLOPE_ACCEL, DROP_TIMER,
 } from './engine/constants.js';
 import { createInput } from './engine/input.js';
 import { runLoop } from './engine/loop.js';
@@ -92,7 +93,7 @@ import { Chiptune } from './chiptune.js';
     resetPlayer(); camera.reset(0); camX = 0; timeLeft = START_TIME; timeFrame = 0;
   }
   function resetPlayer() {
-    player = { x: levelData.spawn.x, y: levelData.spawn.y, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
+    player = { x: levelData.spawn.x, y: levelData.spawn.y, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, onOneWay: false, dropTimer: 0, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
   }
   function startGame() { loadLevel(true); state = 'playing'; Music.start(); }
 
@@ -102,31 +103,99 @@ import { Chiptune } from './chiptune.js';
   function aabb(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
 
-  // --- axis-separated tile collision ---
+  // --- axis-separated tile collision (Phase 3: height-field + one-way) ---
   function move(ent, recordBump) {
+    const MARGIN = 1;
+
+    // === X axis: wall / step-up ===
     ent.x += ent.vx;
-    {
+    if (ent.vx > 0) {
+      const tx = Math.floor((ent.x + ent.w) / TILE);
       const top = Math.floor((ent.y + 1) / TILE), bot = Math.floor((ent.y + ent.h - 1) / TILE);
-      if (ent.vx > 0) {
-        const tx = Math.floor((ent.x + ent.w) / TILE);
-        for (let ty = top; ty <= bot; ty++) if (solidAt(tx, ty)) { ent.x = tx * TILE - ent.w; ent.vx = 0; break; }
-      } else if (ent.vx < 0) {
-        const tx = Math.floor(ent.x / TILE);
-        for (let ty = top; ty <= bot; ty++) if (solidAt(tx, ty)) { ent.x = (tx + 1) * TILE; ent.vx = 0; break; }
+      let blocked = false, stepUpY = null;
+      for (let ty = top; ty <= bot; ty++) {
+        const c = tileAt(tx, ty);
+        if (c === '.' || c === '-') continue;
+        const sh = tilemap.slope(tx, ty);
+        if (!sh) continue;
+        const fx = (ent.x + ent.w - tx * TILE) / TILE;
+        const surfY = ty * TILE + sh.hL + (sh.hR - sh.hL) * fx;
+        if (surfY <= ent.y || surfY >= ent.y + ent.h) continue;
+        const climb = (ent.y + ent.h) - surfY;
+        if (climb > MAX_STEP_UP) { blocked = true; break; }
+        else if (climb > 0 && (stepUpY === null || surfY < stepUpY)) stepUpY = surfY;
       }
+      if (blocked) { ent.x = tx * TILE - ent.w; ent.vx = 0; }
+      else if (stepUpY !== null) ent.y = stepUpY - ent.h;
+    } else if (ent.vx < 0) {
+      const tx = Math.floor(ent.x / TILE);
+      const top = Math.floor((ent.y + 1) / TILE), bot = Math.floor((ent.y + ent.h - 1) / TILE);
+      let blocked = false, stepUpY = null;
+      for (let ty = top; ty <= bot; ty++) {
+        const c = tileAt(tx, ty);
+        if (c === '.' || c === '-') continue;
+        const sh = tilemap.slope(tx, ty);
+        if (!sh) continue;
+        const fx = (ent.x - tx * TILE) / TILE;
+        const surfY = ty * TILE + sh.hL + (sh.hR - sh.hL) * fx;
+        if (surfY <= ent.y || surfY >= ent.y + ent.h) continue;
+        const climb = (ent.y + ent.h) - surfY;
+        if (climb > MAX_STEP_UP) { blocked = true; break; }
+        else if (climb > 0 && (stepUpY === null || surfY < stepUpY)) stepUpY = surfY;
+      }
+      if (blocked) { ent.x = (tx + 1) * TILE; ent.vx = 0; }
+      else if (stepUpY !== null) ent.y = stepUpY - ent.h;
     }
-    ent.y += ent.vy; ent.onGround = false;
-    {
+
+    // === Y axis: ground / slope / one-way ===
+    const prevBottom = ent.y + ent.h; // feet after X resolution
+    ent.y += ent.vy;
+    ent.onGround = false;
+    ent.onOneWay = false;
+
+    if (ent.vy >= 0) {
+      const xL = ent.x + MARGIN, xR = ent.x + ent.w - MARGIN;
+      const bottomY = ent.y + ent.h;
+      let bestSurface = null;
+
+      // Solid surfaces (flat + slopes)
+      for (const px of [xL, xR]) {
+        const gy = tilemap.surfaceYAt(px, bottomY);
+        if (gy !== null && gy >= prevBottom - 0.01 && gy <= bottomY + 0.01) {
+          if (bestSurface === null || gy < bestSurface) bestSurface = gy;
+        }
+      }
+
+      // One-way platforms (only when falling, feet were above, not dropping)
+      if (ent.dropTimer <= 0) {
+        const l = Math.floor(xL / TILE), r = Math.floor(xR / TILE);
+        const ty = Math.floor(bottomY / TILE);
+        for (let tx = l; tx <= r; tx++) {
+          if (tilemap.isOneWay(tx, ty) && prevBottom <= ty * TILE + 0.01) {
+            const platTop = ty * TILE;
+            if (bestSurface === null || platTop < bestSurface) { bestSurface = platTop; ent.onOneWay = true; }
+          }
+        }
+      }
+
+      if (bestSurface !== null) { ent.y = bestSurface - ent.h; ent.vy = 0; ent.onGround = true; }
+    } else {
+      // Rising: ceiling / bump check
       const l = Math.floor((ent.x + 1) / TILE), r = Math.floor((ent.x + ent.w - 1) / TILE);
-      if (ent.vy > 0) {
-        const ty = Math.floor((ent.y + ent.h) / TILE);
-        for (let tx = l; tx <= r; tx++) if (solidAt(tx, ty)) { ent.y = ty * TILE - ent.h; ent.vy = 0; ent.onGround = true; break; }
-      } else if (ent.vy < 0) {
-        const ty = Math.floor(ent.y / TILE); let best = -1, bo = 0;
-        for (let tx = l; tx <= r; tx++) if (solidAt(tx, ty)) { const ov = Math.min(ent.x + ent.w, (tx + 1) * TILE) - Math.max(ent.x, tx * TILE); if (ov > bo) { bo = ov; best = tx; } }
-        if (best >= 0) { ent.y = (ty + 1) * TILE; ent.vy = 0; if (recordBump) { ent.bumped = true; ent.bumpTx = best; ent.bumpTy = ty; } }
+      const ty = Math.floor(ent.y / TILE);
+      let best = -1, bo = 0;
+      for (let tx = l; tx <= r; tx++) {
+        const c = tileAt(tx, ty);
+        if (c === '.' || c === '-') continue;
+        const sh = tilemap.slope(tx, ty);
+        if (!sh) continue;
+        const ov = Math.min(ent.x + ent.w, (tx + 1) * TILE) - Math.max(ent.x, tx * TILE);
+        if (ov > bo) { bo = ov; best = tx; }
       }
+      if (best >= 0) { ent.y = (ty + 1) * TILE; ent.vy = 0; if (recordBump) { ent.bumped = true; ent.bumpTx = best; ent.bumpTy = ty; } }
     }
+
+    if (ent.dropTimer > 0) ent.dropTimer--;
   }
   // --- scoring / spawning ---
   function addScore(n) { score += n; if (score < 0) score = 0; if (score > 999999) score = 999999; }
@@ -149,6 +218,7 @@ import { Chiptune } from './chiptune.js';
     const p = player;
     const left = input.held.ArrowLeft || input.held.KeyA, right = input.held.ArrowRight || input.held.KeyD;
     const run = input.held.ShiftLeft || input.held.ShiftRight || input.held.KeyX;
+    const downHeld = input.held.ArrowDown || input.held.KeyS;
     const maxS = run ? MAX_RUN : MAX_WALK, acc = run ? ACCEL_RUN : ACCEL_WALK;
     if (left && !right) { p.vx -= acc; p.facing = -1; }
     else if (right && !left) { p.vx += acc; p.facing = 1; }
@@ -156,7 +226,24 @@ import { Chiptune } from './chiptune.js';
     p.vx = clamp(p.vx, -maxS, maxS);
     if (!left && !right && Math.abs(p.vx) < 0.05) p.vx = 0;
 
-    if (jumpPressed && p.onGround) { p.vy = JUMP_VEL; p.onGround = false; SFX.jump(); }
+    // Phase 3: slope slide — nudge downhill when idle on a slope
+    if (p.onGround && p.vx === 0) {
+      const feetY = p.y + p.h;
+      const gyL = tilemap.surfaceYAt(p.x + 1, feetY);
+      const gyR = tilemap.surfaceYAt(p.x + p.w - 1, feetY);
+      if (gyL !== null && gyR !== null && gyL !== gyR) {
+        p.vx += (gyL > gyR) ? -SLOPE_ACCEL : SLOPE_ACCEL;
+      }
+    }
+
+    // Phase 3: drop-through (Down + Jump on a one-way platform)
+    if (downHeld && jumpPressed && p.onGround && p.onOneWay) {
+      p.dropTimer = DROP_TIMER;
+      p.onGround = false;
+      p.vy = 2;
+    } else if (jumpPressed && p.onGround) {
+      p.vy = JUMP_VEL; p.onGround = false; SFX.jump();
+    }
     const g = p.vy < 0 ? (jumpHeld ? GRAV_UP_HELD : GRAV_UP_RELEAS) : GRAV_DOWN;
     p.vy += g; if (p.vy > TERM_VY) p.vy = TERM_VY;
 
@@ -306,6 +393,9 @@ import { Chiptune } from './chiptune.js';
     else if (c === '?' || c === 'M') qblock(x, y, ((frame / 8) | 0) % 2); else if (c === 'U') used(x, y);
     else if (c === 'Q') pipeL(x, y, 1); else if (c === 'W') pipeR(x, y, 1);
     else if (c === 'E') pipeL(x, y, 0); else if (c === 'R') pipeR(x, y, 0);
+    else if (c === '/') slopeSlash(x, y);
+    else if (c === '\\') slopeBack(x, y);
+    else if (c === '-') oneWayPlank(x, y);
   }
   // --- Phase 2: autotiled ground (organic terrain) ---
   // `idx` is the bitmask from bakeAutotile(). We composite a dirt base with a
@@ -344,6 +434,31 @@ import { Chiptune } from './chiptune.js';
   function autotileCornerTR(x, y) {
     ctx.fillStyle = '#3cb830'; ctx.fillRect(x + 14, y + 4, 2, 2); // grass rounds down on the right
     ctx.fillStyle = '#1a7a10'; ctx.fillRect(x + 14, y + 6, 2, 1);
+  }
+  // --- Phase 3: slope rendering (dirt fill under diagonal + grass cap) ---
+  function slopeSlash(x, y) {
+    // '/' — surface rises left→right: (x, y+16) to (x+16, y)
+    for (let px = 0; px < 16; px++) {
+      const surfRow = 15 - px; // row index of the surface at this column
+      if (surfRow < 15) { ctx.fillStyle = '#c8824c'; ctx.fillRect(x + px, y + surfRow + 1, 1, 15 - surfRow); }
+      ctx.fillStyle = '#3cb830'; ctx.fillRect(x + px, y + surfRow, 1, 1);
+      if (surfRow > 0) { ctx.fillStyle = '#8ce83c'; ctx.fillRect(x + px, y + surfRow - 1, 1, 1); }
+    }
+  }
+  function slopeBack(x, y) {
+    // '\' — surface rises right→left: (x, y) to (x+16, y+16)
+    for (let px = 0; px < 16; px++) {
+      const surfRow = px; // row index of the surface at this column
+      if (surfRow < 15) { ctx.fillStyle = '#c8824c'; ctx.fillRect(x + px, y + surfRow + 1, 1, 15 - surfRow); }
+      ctx.fillStyle = '#3cb830'; ctx.fillRect(x + px, y + surfRow, 1, 1);
+      if (surfRow > 0) { ctx.fillStyle = '#8ce83c'; ctx.fillRect(x + px, y + surfRow - 1, 1, 1); }
+    }
+  }
+  // --- Phase 3: one-way platform (2px top bar) ---
+  function oneWayPlank(x, y) {
+    ctx.fillStyle = '#8B5A2B'; ctx.fillRect(x, y, 16, 2);
+    ctx.fillStyle = '#A0722B'; ctx.fillRect(x, y, 16, 1);
+    ctx.fillStyle = '#6B3A1B'; ctx.fillRect(x, y + 1, 16, 1);
   }
   function hard(x, y) { ctx.fillStyle = '#b0b0b0'; ctx.fillRect(x, y, 16, 16); ctx.fillStyle = '#d8d8d8'; ctx.fillRect(x, y, 16, 2); ctx.fillRect(x, y, 2, 16); ctx.fillStyle = '#6a6a6a'; ctx.fillRect(x + 14, y, 2, 16); ctx.fillRect(x, y + 14, 16, 2); ctx.fillRect(x + 2, y + 2, 2, 2); ctx.fillRect(x + 12, y + 2, 2, 2); ctx.fillRect(x + 2, y + 12, 2, 2); ctx.fillRect(x + 12, y + 12, 2, 2); }
   function brick(x, y) { ctx.fillStyle = '#c04a10'; ctx.fillRect(x, y, 16, 16); ctx.fillStyle = '#f08030'; ctx.fillRect(x, y, 16, 1); ctx.fillStyle = '#7a2a08'; ctx.fillRect(x, y + 7, 16, 1); ctx.fillRect(x + 7, y, 1, 7); ctx.fillRect(x + 3, y + 8, 1, 8); ctx.fillRect(x + 11, y + 8, 1, 8); }
@@ -479,6 +594,9 @@ import { Chiptune } from './chiptune.js';
     get W() { return W; },
     get H() { return H; },
     get flagX() { return flagX; },
+    get tilemap() { return tilemap; },
     startGame,
+    // Phase 3 test hook: load a different level data object for testing
+    loadTestLevel(data) { levelData = data; loadLevel(true); state = 'playing'; },
   };
 
