@@ -76,6 +76,14 @@ The focus is a **major engine upgrade**: bringing *Super Plumber Bros.* up to a 
 - **Engine & physics** — data-driven multi-layer JSON tilemaps (`background`/`collision`/`foreground`), decorative autotiling (grass/dirt/corners), and a new **slope + one-way-platform physics** core (45° & 22.5° slopes via a per-tile height field).
 - **Asset pipeline** — PNG sprite-sheet atlas loader + a state-based animation controller (idle/run/skid/jump/fall by velocity + ground state + power-up).
 - **Rendering & juice** — data-driven multi-layer **parallax** scrolling (sky → mountains → hills → foreground-over-player) and a pooled **VFX** system (skid/land dust, coin-pop + score float, block-bounce sine displacement).
+### Phase 3 kickoff — slope physics & semi-solids
+Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 3" (per-tile height field + step-up + one-way platforms). Concrete starting points for this codebase:
+1. **New chars** — add `/` `\` (solid slopes) + `-` (one-way platform) to the `assets/levels/README.md` legend. `engine/level.js` already passes any char through to the collision buffer, so **no loader change** is needed for the new chars.
+2. **Collision** — replace the flat `move()` / `resolveX` / `resolveY` in `js/game.js` (search `function move(`) with a per-tile height-field: `step-up` (≤ half-tile auto-climb), `slope slide` (steepness from neighbour heights), `one-way` (solid only when falling **and** feet were above the top). **Decision to make:** keep the logic in `game.js` (least churn, matches the roadmap's "replace the flat resolve in js/game.js") or extract a new `js/engine/collision.js` (matches the roadmap end-state structure). Prefer the smaller change unless the extraction is clean.
+3. **Render** — slope silhouettes (dirt fill under the diagonal) + one-way plank (2px top bar). Keep the Phase 2 autotile path for flat `#`/`=`.
+4. **⚠️ grid-diff gotcha** — `tools/grid-diff.mjs` compares the *collision* layer, so adding **solid** slope chars to `w1-1.json` breaks the 1:1 baseline. Safest: add slopes/one-ways to a **new** test level first (keep `w1-1.json` pristine until the physics is verified), or extend the grid-diff baseline. Add step-up / slope / one-way checks to `test/harness.mjs` (there's already a tilemap/autotile section to extend).
+
+
 
 **Open decisions — RESOLVED in Phase 0:**
 1. Module system → **ES modules** (native `<script type="module">`, no build step).
