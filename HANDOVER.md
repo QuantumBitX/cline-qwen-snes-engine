@@ -89,6 +89,20 @@ Implemented: `/` `\` (45° solid slopes) + `-` (one-way platform) in the collisi
 - `w1-1.json` left pristine to preserve grid-diff baseline; test level `w1-1-slopes.json` exercises new physics
 - 22 new harness checks (13 tilemap unit + 9 integration)
 
+### Known issues / limitations (carry-forward)
+| # | Issue | Impact | Suggested fix |
+|---|---|---|---|
+| 1 | **Adjacent `\` tile boundary discontinuity** — two adjacent `\` tiles create a Y-jump at the shared edge (right edge of tile N = tile bottom, left edge of tile N+1 = tile top). The two-corner probe sees `gyL > gyR` on the left tile but `gyL < gyR` on the right, causing the slide to reverse. | Multi-tile slopes (3+ consecutive `\` or `/`) don't slide smoothly; single-tile slopes work fine. | Use the tile's own gradient (`hR - hL` from the *current* tile) rather than comparing absolute surface heights across the boundary. Or clamp the probe to the current tile's column. |
+| 2 | **One-way jump-through lands back on platform** — after jumping up through a `-` platform, the player falls back onto it (correct one-way behaviour). Not a bug, but may feel unintuitive in some level designs. | None (by design). | N/A — document in level design guide if needed. |
+
+### Phase 4 kickoff — sprite sheets + animation controller
+Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 4". Concrete starting points for this codebase:
+1. **New module** — `js/engine/spritesheet.js`: PNG loader (`new Image()` + onload), frame slicing from a grid (cols×rows), and a `draw(ctx, frame, x, y, w, h, flip)` method. Keep `imageSmoothingEnabled = false`.
+2. **New module** — `js/engine/animation.js`: state-based frame controller. API: `setAnim(name)`, `tick()`, `currentFrame()`, `isFlipped()`. States: `idle`, `run`, `jump`, `skid`, `die`. Frame durations in frames (not seconds) to match the 60fps timestep.
+3. **Placeholder PNGs** — generate simple colored-rectangle sprite sheets in code (or as small base64 data URIs) so the engine works before final art is supplied. Store in `assets/sprites/`.
+4. **Replace `js/sprites.js`** — the current ASCII pixel-art data will be superseded. Keep the file until the PNG path is verified, then delete.
+5. **Integration in `game.js`** — replace the `drawMario`/`drawGoomba`/etc. calls with `sheet.draw(...)` + `anim.currentFrame()`. The animation state is derived from existing player state (`player.vx`, `player.vy`, `player.onGround`, `player.skid`).
+6. **Acceptance** — all existing harness tests still pass (70 checks), grid-diff still 1:1, and the game renders with the new sprite path in a browser. Add a harness check that the spritesheet module loads and slices correctly (headless: mock `Image` or just validate the slicing math).
 
 
 **Open decisions — RESOLVED in Phase 0:**

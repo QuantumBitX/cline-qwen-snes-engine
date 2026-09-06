@@ -1,8 +1,8 @@
 # SNES "Super Mario World" Engine Upgrade — Roadmap
 
-> **Generated:** 2026-09-05 · **Status:** ✅ **Phase 0 delivered & committed** (`d633189`) · Phases 1–7 pending (live checklist in `HANDOVER.md` §7)
+> **Generated:** 2026-09-05 · **Status:** ✅ **Phases 0–3 delivered & committed** · Phases 4–7 pending (live checklist in `HANDOVER.md` §7)
 > Companion to `HANDOVER.md`. Step‑by‑step plan for upgrading *Super Plumber Bros.* from a NES‑era single‑layer platformer to a **data‑driven, 16‑bit‑style** engine.
-> ⚠️ Originally a plan-only doc. **Phase 0 has since been executed** (ES-module refactor + 2 bug fixes + `test/` headless harness — commit `d633189`). Phases 1–7 remain planning.
+> ⚠️ Originally a plan-only doc. **Phases 0–3 have since been executed** (ES-module refactor, JSON level format, autotiling, slope/one-way physics — see `HANDOVER.md` §3 for per-phase summaries). Phases 4–7 remain planning.
 
 ---
 
