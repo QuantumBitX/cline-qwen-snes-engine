@@ -13,7 +13,7 @@ import { runLoop } from './engine/loop.js';
 import { createCamera } from './engine/camera.js';
 import { Sprites } from './sprites.js';
 import { loadLevelData, setLevelTransport } from './engine/level.js';
-import { createTilemap } from './engine/tilemap.js';
+import { createTilemap, bakeAutotile, ATLAS } from './engine/tilemap.js';
 import { Chiptune } from './chiptune.js';
 
   const canvas = document.getElementById('game');
@@ -83,6 +83,7 @@ import { Chiptune } from './chiptune.js';
   // --- level load / reset ---
   function loadLevel(fullReset) {
     tilemap = createTilemap(levelData);
+    bakeAutotile(tilemap);   // Phase 2: bake the ground autotile mask (render-only, re-baked each life)
     W = levelData.w; H = levelData.h; coins = levelData.coins.map((c) => ({ ...c }));
     flagX = levelData.flag.col * TILE + 8; flagBaseY = levelData.flag.baseRow * TILE;
     enemies = levelData.enemies.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx, vy: 0, active: false, dead: false, squish: 0, onGround: false }));
@@ -295,17 +296,55 @@ import { Chiptune } from './chiptune.js';
       if (tx < 0 || tx >= W) continue;
       const c = tilemap.tileAt(tx, ty); if (c === '.') continue;
       let dx = tx * TILE - camX, dy = ty * TILE + bounceOff(tx, ty);
-      drawTile(c, dx, dy);
+      drawTile(c, dx, dy, tx, ty);
     }
   }
   function bounceOff(tx, ty) { for (const b of bounces) if (b.tx === tx && b.ty === ty) return -Math.round(6 * Math.sin(Math.PI * b.age / 10)); return 0; }
-  function drawTile(c, x, y) {
-    if (c === '#') ground(x, y); else if (c === 'X') hard(x, y); else if (c === 'B') brick(x, y);
+  function drawTile(c, x, y, tx, ty) {
+    if (c === '#' || c === '=') ground(x, y, tilemap.autotile[ty * W + tx]);
+    else if (c === 'X') hard(x, y); else if (c === 'B') brick(x, y);
     else if (c === '?' || c === 'M') qblock(x, y, ((frame / 8) | 0) % 2); else if (c === 'U') used(x, y);
     else if (c === 'Q') pipeL(x, y, 1); else if (c === 'W') pipeR(x, y, 1);
     else if (c === 'E') pipeL(x, y, 0); else if (c === 'R') pipeR(x, y, 0);
   }
-  function ground(x, y) { ctx.fillStyle = '#c8824c'; ctx.fillRect(x, y, 16, 16); ctx.fillStyle = '#e0a86c'; ctx.fillRect(x, y, 16, 2); ctx.fillRect(x, y, 2, 16); ctx.fillStyle = '#8a4c1c'; ctx.fillRect(x + 14, y, 2, 16); ctx.fillRect(x, y + 14, 16, 2); ctx.fillRect(x + 3, y + 5, 2, 2); ctx.fillRect(x + 10, y + 9, 2, 2); }
+  // --- Phase 2: autotiled ground (organic terrain) ---
+  // `idx` is the bitmask from bakeAutotile(). We composite a dirt base with a
+  // grass cap, lit/dark cliff edges and rounded corners on top. Pure rendering
+  // — the collision layer above is untouched.
+  function ground(x, y, idx) {
+    autotileDirt(x, y);
+    if (idx & ATLAS.cap) autotileCap(x, y);
+    if (idx & ATLAS.edgeL) autotileEdgeL(x, y);
+    if (idx & ATLAS.edgeR) autotileEdgeR(x, y);
+    if (idx & ATLAS.cornerTL) autotileCornerTL(x, y);
+    if (idx & ATLAS.cornerTR) autotileCornerTR(x, y);
+  }
+  function autotileDirt(x, y) {
+    ctx.fillStyle = '#c8824c'; ctx.fillRect(x, y, 16, 16);
+    ctx.fillStyle = '#b06a34'; ctx.fillRect(x + 3, y + 7, 2, 2); ctx.fillRect(x + 10, y + 11, 2, 2); ctx.fillRect(x + 13, y + 6, 1, 1); ctx.fillRect(x + 5, y + 13, 1, 1);
+    ctx.fillStyle = '#e0a86c'; ctx.fillRect(x + 7, y + 9, 1, 1); ctx.fillRect(x + 11, y + 14, 1, 1);
+  }
+  function autotileCap(x, y) {
+    ctx.fillStyle = '#8ce83c'; ctx.fillRect(x, y, 16, 1);   // bright top highlight
+    ctx.fillStyle = '#3cb830'; ctx.fillRect(x, y + 1, 16, 2); // grass body
+    ctx.fillStyle = '#1a7a10'; ctx.fillRect(x, y + 3, 16, 1); // dark fringe into the dirt
+  }
+  function autotileEdgeL(x, y) {
+    ctx.fillStyle = '#e0a86c'; ctx.fillRect(x, y + 4, 2, 12); // lit left cliff face
+    ctx.fillStyle = '#f2c890'; ctx.fillRect(x, y + 4, 1, 12);
+  }
+  function autotileEdgeR(x, y) {
+    ctx.fillStyle = '#8a4c1c'; ctx.fillRect(x + 14, y + 4, 2, 12); // shadowed right cliff face
+    ctx.fillStyle = '#6a3410'; ctx.fillRect(x + 15, y + 4, 1, 12);
+  }
+  function autotileCornerTL(x, y) {
+    ctx.fillStyle = '#3cb830'; ctx.fillRect(x, y + 4, 2, 2); // grass rounds down on the left
+    ctx.fillStyle = '#1a7a10'; ctx.fillRect(x, y + 6, 2, 1);
+  }
+  function autotileCornerTR(x, y) {
+    ctx.fillStyle = '#3cb830'; ctx.fillRect(x + 14, y + 4, 2, 2); // grass rounds down on the right
+    ctx.fillStyle = '#1a7a10'; ctx.fillRect(x + 14, y + 6, 2, 1);
+  }
   function hard(x, y) { ctx.fillStyle = '#b0b0b0'; ctx.fillRect(x, y, 16, 16); ctx.fillStyle = '#d8d8d8'; ctx.fillRect(x, y, 16, 2); ctx.fillRect(x, y, 2, 16); ctx.fillStyle = '#6a6a6a'; ctx.fillRect(x + 14, y, 2, 16); ctx.fillRect(x, y + 14, 16, 2); ctx.fillRect(x + 2, y + 2, 2, 2); ctx.fillRect(x + 12, y + 2, 2, 2); ctx.fillRect(x + 2, y + 12, 2, 2); ctx.fillRect(x + 12, y + 12, 2, 2); }
   function brick(x, y) { ctx.fillStyle = '#c04a10'; ctx.fillRect(x, y, 16, 16); ctx.fillStyle = '#f08030'; ctx.fillRect(x, y, 16, 1); ctx.fillStyle = '#7a2a08'; ctx.fillRect(x, y + 7, 16, 1); ctx.fillRect(x + 7, y, 1, 7); ctx.fillRect(x + 3, y + 8, 1, 8); ctx.fillRect(x + 11, y + 8, 1, 8); }
   function qblock(x, y, fr) { ctx.fillStyle = fr ? '#f8a830' : '#e08020'; ctx.fillRect(x, y, 16, 16); ctx.fillStyle = '#ffd070'; ctx.fillRect(x, y, 16, 1); ctx.fillRect(x, y, 1, 16); ctx.fillStyle = '#7a3c08'; ctx.fillRect(x + 14, y, 2, 16); ctx.fillRect(x, y + 14, 16, 2); ctx.fillRect(x + 1, y + 1, 2, 2); ctx.fillRect(x + 13, y + 1, 2, 2); ctx.fillRect(x + 1, y + 13, 2, 2); ctx.fillRect(x + 13, y + 13, 2, 2); ctx.fillStyle = '#fff'; ctx.fillRect(x + 5, y + 3, 6, 2); ctx.fillRect(x + 9, y + 5, 2, 2); ctx.fillRect(x + 7, y + 7, 4, 2); ctx.fillRect(x + 7, y + 9, 2, 2); ctx.fillRect(x + 7, y + 12, 2, 2); }
