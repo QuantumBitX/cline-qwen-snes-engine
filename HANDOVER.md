@@ -1,15 +1,18 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-06. Branch: `master`. **Phases 0, 1, 2, and 3 of the SNES upgrade are complete and committed.**
+> Last updated: 2026-09-06. Branch: `master`. **Phases 0, 1, 2, 3, and 4 of the SNES upgrade are complete and committed.**
 > Phase 0: ES-module refactor + both §5 bugs fixed + headless Node test harness. Phase 1: 3-layer JSON level
 > format + loader + tilemap query API, World 1-1 migrated to `assets/levels/w1-1.json`, and the game switched
 > to the JSON path (verified 1:1 by grid-diff + harness). Phase 2: decorative autotiling — `#`/`=` ground now
 > renders as organic terrain (grass cap, dirt body, lit/dark cliff edges, rounded corners) via a Moore-neighbour
 > mask baked once at load (render-only; collision untouched). Phase 3: per-tile slope physics (45° `/` `\` with
 > step-up + downhill slide) and one-way platforms (`-` with drop-through) — collision rewritten as a height-field
-> in `game.js`, 22 new harness checks, test level `w1-1-slopes.json`. Node 22 is now installed.
-> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 4 — sprite sheets + animation controller).**
+> in `game.js`, 22 new harness checks, test level `w1-1-slopes.json`. Phase 4: PNG sprite sheet loader + frame
+> grid slicer (`spritesheet.js`), state-based animation controller (`animation.js` — idle/run/run_fast/skid/
+> jump/fall/land), placeholder PNG sheets in `assets/sprites/`, integrated into `game.js` with ASCII fallback.
+> 45 new harness checks (115 total). Node 22 is now installed.
+> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 5 — parallax scrolling).**
 
 ---
 
@@ -41,15 +44,17 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `style.css` | Layout + pixelated scaling | ✅ done (tracked) |
 | `js/sprites.js` (144 ln) | Pixel-art sprite data → offscreen canvases | ✅ done (tracked) |
 | `js/level.js` (85 ln) | World 1-1 as feature placements — **now only the source for the Phase 1 generator + harness baseline**; the running game no longer imports it | ✅ legacy (Phase 1) |
-| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/`; **loads the level from `assets/levels/w1-1.json`**; **renders autotiled ground**; **height-field collision (Phase 3)** | ✅ Phase 0 + **Phase 1** + **Phase 2** + **Phase 3** |
+| `js/game.js` | **Entry module** — physics, collision, entities, HUD, **SFX**; imports `engine/`; **loads the level from `assets/levels/w1-1.json`**; **renders autotiled ground**; **height-field collision (Phase 3)**; **sprite sheet rendering + animation controller (Phase 4)** | ✅ Phase 0 + **Phase 1** + **Phase 2** + **Phase 3** + **Phase 4** |
 | `js/engine/constants.js` | **NEW** all tunables (view/physics/camera/**collision**) in one place | ✅ Phase 0 + **Phase 3** |
 | `js/engine/input.js` | **NEW** keyboard state + jump edge detection | ✅ Phase 0 |
 | `js/engine/loop.js` | **NEW** fixed 60fps timestep | ✅ Phase 0 |
 | `js/engine/camera.js` | **NEW** smooth look-ahead follow + safety clamp | ✅ Phase 0 (bug #2) |
 | `js/engine/level.js` | **NEW** 3-layer JSON parser (`parseLevel`) + injectable transport (`setLevelTransport`) + `loadLevelData` | ✅ Phase 1 |
 | `js/engine/tilemap.js` | **NEW** `createTilemap` — typed-array collision grid with `tileAt`/`solidAt`/`isGround`/`set`/`rows` + **`bakeAutotile` + `ATLAS` (Phase 2)** + **`slope`/`isOneWay`/`surfaceYAt` (Phase 3)** | ✅ Phase 1 + Phase 2 + **Phase 3** |
+| `js/engine/spritesheet.js` | **NEW** PNG atlas loader — `computeFrames()` pure function + `SpriteSheet` class (`load()` browser / `init()` headless, `draw()` with flipX) | ✅ Phase 4 |
+| `js/engine/animation.js` | **NEW** state-based frame controller — `pickPlayerState()` + `AnimController` (idle/run/run_fast/skid/jump/fall/land, speed-dependent rate, land squash) | ✅ Phase 4 |
 | `js/chiptune.js` (284 ln) | NES-style sequencer + 3 original tracks (now an ES-module export) | ✅ done |
-| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs (**70 checks**, incl. Phase 1 loader/tilemap + Phase 2 autotile + Phase 3 slope/one-way) | ✅ Phase 0 + Phase 1 + Phase 2 + Phase 3 |
+| `test/harness.mjs` + `test/browser-stub.mjs` | **NEW** headless Node behaviour tests + browser stubs (**115 checks**, incl. Phase 1 loader/tilemap + Phase 2 autotile + Phase 3 slope/one-way + Phase 4 spritesheet/animation) | ✅ Phase 0 + Phase 1 + Phase 2 + Phase 3 + **Phase 4** |
 | `package.json` | **NEW** `{"type":"module"}` + `npm test` (no deps/build) | ✅ Phase 0 |
 | `assets/levels/README.md` | **NEW** 3-layer JSON level format spec (background/collision/foreground) | ✅ Phase 1 |
 | `assets/levels/w1-1.json` | **NEW** World 1-1 as JSON (migrated 1:1 from `buildLevel`) | ✅ Phase 1 |
@@ -57,6 +62,10 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `tools/generate-w1-1.mjs` | **NEW** dev tool: regenerate `w1-1.json` from `buildLevel()` | ✅ Phase 1 |
 | `tools/grid-diff.mjs` | **NEW** dev tool: assert the JSON-derived grid == `buildLevel()` grid (byte-identical) | ✅ Phase 1 |
 | `tools/browser-smoke.mjs` | **NEW** dev tool: force the browser fetch branch, boot the game, verify the player moves | ✅ Phase 1 |
+| `tools/gen-sprites.mjs` | **NEW** dev tool: generates placeholder PNG sprite sheets (minimal PNG encoder, no deps) | ✅ Phase 4 |
+| `assets/sprites/player.png` | **NEW** placeholder player sheet (64×32, 4×2 grid of 16×16 — one cell per anim state) | ✅ Phase 4 |
+| `assets/sprites/goomba.png` | **NEW** placeholder goomba sheet (32×16, 2×1 grid — two walk frames) | ✅ Phase 4 |
+| `assets/sprites/mushroom.png` | **NEW** placeholder mushroom sheet (16×16, single frame) | ✅ Phase 4 |
 | `music_options.html` (138 ln) | **NEW** standalone page to listen to & pick a track | ✅ done (untracked) |
 | `ROADMAP_SNES_UPGRADE.md` | **NEW** full SNES‑engine upgrade roadmap (Phase 0–7) | 📋 plan — see §3 |
 | `README.md` | Project overview / run instructions | ✅ done |
@@ -65,7 +74,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `test.py` | Dev-container smoke test | ✅ done |
 | `.DS_Store`, `~$rio_Project_Summary.docx` | macOS + Word temp junk | 🗑️ safe to delete |
 
-> **Git:** Phase 0 is committed (`d633189`), Phase 1 in three commits (`4578a46` format+loader+tilemap, `b099b59` w1-1.json migration, `7a8a3de` game switched to the JSON path), Phase 2 in four commits (`9bc477d` autotile core, `76c7542` harness checks, `52231d5` autotile render, + this docs commit), and Phase 3 in two commits (`Phase 3 (1/4): slope height-field collision + one-way platforms` + `Phase 3 (2/4): test level + harness tests + docs`). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
+> **Git:** Phase 0 is committed (`d633189`), Phase 1 in three commits (`4578a46` format+loader+tilemap, `b099b59` w1-1.json migration, `7a8a3de` game switched to the JSON path), Phase 2 in four commits (`9bc477d` autotile core, `76c7542` harness checks, `52231d5` autotile render, + this docs commit), Phase 3 in two commits (slope height-field + one-way platforms, test level + harness + docs), and Phase 4 in three commits (`d5a6d5d` spritesheet.js + animation.js, `d149c35` placeholder PNGs + generator, `d4e543f` game.js integration + 45 harness checks). `music_options.html`, `generate_mario_summary.py`, and `Mario_Project_Summary.docx` remain **untracked** (music-preview page + status-doc tooling — not part of the game).
 
 ---
 
@@ -73,7 +82,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 
 The focus is a **major engine upgrade**: bringing *Super Plumber Bros.* up to a **16-bit SNES / Super Mario World** standard. A complete, phased plan is in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7).
 
-**Status: Phases 0, 1, 2, and 3 are complete and committed.** The codebase is pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera / **level** / **tilemap**), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, **70 checks**) that runs the real game module and validates behaviour. Phase 1 added the **3-layer JSON level format** + loader + tilemap query API, migrated World 1-1 to `assets/levels/w1-1.json`, and switched the running game to load from JSON (verified 1:1 by `tools/grid-diff.mjs` + the harness). **Phase 2 (decorative autotiling)** added `bakeAutotile` + `ATLAS` to `tilemap.js` and made `#`/`=` ground render as organic terrain — a **render-only** change verified by 9 new harness checks, with `tools/grid-diff.mjs` still reporting GRID 1:1 OK. **Phase 3 (slope physics & semi-solids)** rewrote the collision in `game.js` as a per-tile height-field: 45° `/` `\` slopes with step-up (≤ 8px auto-climb) + downhill slide, and `-` one-way platforms with drop-through (Down+Jump). Verified by 22 new harness checks (tilemap unit + integration) and a dedicated test level `w1-1-slopes.json`. **Phase 4 (sprite sheets + animation controller) is next.**
+**Status: Phases 0, 1, 2, 3, and 4 are complete and committed.** The codebase is pure **ES modules** (no build step), with `game.js` split into `js/engine/` (constants / input / loop / camera / **level** / **tilemap** / **spritesheet** / **animation**), both §5 bugs fixed, and a **headless Node test harness** (`test/harness.mjs`, **115 checks**) that runs the real game module and validates behaviour. Phase 1 added the **3-layer JSON level format** + loader + tilemap query API, migrated World 1-1 to `assets/levels/w1-1.json`, and switched the running game to load from JSON (verified 1:1 by `tools/grid-diff.mjs` + the harness). **Phase 2 (decorative autotiling)** added `bakeAutotile` + `ATLAS` to `tilemap.js` and made `#`/`=` ground render as organic terrain — a **render-only** change verified by 9 new harness checks, with `tools/grid-diff.mjs` still reporting GRID 1:1 OK. **Phase 3 (slope physics & semi-solids)** rewrote the collision in `game.js` as a per-tile height-field: 45° `/` `\` slopes with step-up (≤ 8px auto-climb) + downhill slide, and `-` one-way platforms with drop-through (Down+Jump). Verified by 22 new harness checks (tilemap unit + integration) and a dedicated test level `w1-1-slopes.json`. **Phase 4 (sprite sheets + animation controller)** added `spritesheet.js` (PNG atlas loader + `computeFrames()` slicer) and `animation.js` (state machine: idle/run/run_fast/skid/jump/fall/land with speed-dependent frame rate + land squash), placeholder PNG sheets in `assets/sprites/`, and integrated them into `game.js` with the ASCII `sprites.js` kept as fallback. 45 new harness checks validate the slicing math, state picker, and controller transitions. **Phase 5 (parallax scrolling) is next.**
 
 **Scope of the roadmap:**
 - **Engine & physics** — data-driven multi-layer JSON tilemaps (`background`/`collision`/`foreground`), decorative autotiling (grass/dirt/corners), and a new **slope + one-way-platform physics** core (45° & 22.5° slopes via a per-tile height field).
@@ -95,15 +104,21 @@ Implemented: `/` `\` (45° solid slopes) + `-` (one-way platform) in the collisi
 | 1 | **Adjacent `\` tile boundary discontinuity** — two adjacent `\` tiles create a Y-jump at the shared edge (right edge of tile N = tile bottom, left edge of tile N+1 = tile top). The two-corner probe sees `gyL > gyR` on the left tile but `gyL < gyR` on the right, causing the slide to reverse. | Multi-tile slopes (3+ consecutive `\` or `/`) don't slide smoothly; single-tile slopes work fine. | Use the tile's own gradient (`hR - hL` from the *current* tile) rather than comparing absolute surface heights across the boundary. Or clamp the probe to the current tile's column. |
 | 2 | **One-way jump-through lands back on platform** — after jumping up through a `-` platform, the player falls back onto it (correct one-way behaviour). Not a bug, but may feel unintuitive in some level designs. | None (by design). | N/A — document in level design guide if needed. |
 
-### Phase 4 kickoff — sprite sheets + animation controller
-Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 4". Concrete starting points for this codebase:
-> 💡 **Use web fetch** for design references — sprite sheet layout conventions, NES/SNES animation frame timing (e.g. Mario run = 4 frames @ 5–8 frames per cycle), and SMW art style. See §9 for what works.
-1. **New module** — `js/engine/spritesheet.js`: PNG loader (`new Image()` + onload), frame slicing from a grid (cols×rows), and a `draw(ctx, frame, x, y, w, h, flip)` method. Keep `imageSmoothingEnabled = false`.
-2. **New module** — `js/engine/animation.js`: state-based frame controller. API: `setAnim(name)`, `tick()`, `currentFrame()`, `isFlipped()`. States: `idle`, `run`, `jump`, `skid`, `die`. Frame durations in frames (not seconds) to match the 60fps timestep.
-3. **Placeholder PNGs** — generate simple colored-rectangle sprite sheets in code (or as small base64 data URIs) so the engine works before final art is supplied. Store in `assets/sprites/`.
-4. **Replace `js/sprites.js`** — the current ASCII pixel-art data will be superseded. Keep the file until the PNG path is verified, then delete.
-5. **Integration in `game.js`** — replace the `drawMario`/`drawGoomba`/etc. calls with `sheet.draw(...)` + `anim.currentFrame()`. The animation state is derived from existing player state (`player.vx`, `player.vy`, `player.onGround`, `player.skid`).
-6. **Acceptance** — all existing harness tests still pass (70 checks), grid-diff still 1:1, and the game renders with the new sprite path in a browser. Add a harness check that the spritesheet module loads and slices correctly (headless: mock `Image` or just validate the slicing math).
+### Phase 4 — sprite sheets + animation controller (✅ done)
+* **`js/engine/spritesheet.js`:** `computeFrames(imgW, imgH, cellW, cellH)` pure function returns a row-major array of `{sx, sy}` source-rect origins. `SpriteSheet` class: `constructor(src, cellW, cellH)`, `load()` (browser: `new Image()` → onload → populate frames), `init(imgW, imgH)` (headless: set frames from known dims without an Image), `draw(ctx, index, x, y, {flipX, offsetX, offsetY})`. Frame index wraps via modulo.
+* **`js/engine/animation.js`:** `pickPlayerState(p, inputDir)` pure function → `'idle' | 'run' | 'run_fast' | 'skid' | 'jump' | 'fall'`. `AnimController` class: `update(p, inputDir)` advances one tick, returns the frame index to draw. States map to frame indices 0-6 in a 4×2 grid. Run alternates frames every 8 ticks (walk) or 4 ticks (sprint). Land squash: 6-tick timer after falling → ground.
+* **Placeholder PNGs** in `assets/sprites/`: `player.png` (64×32, 4×2 grid of 16×16 colored cells), `goomba.png` (32×16, 2×1), `mushroom.png` (16×16). Generated by `tools/gen-sprites.mjs` (minimal PNG encoder using Node's built-in `zlib`).
+* **Integration in `game.js`:** sheets created at module top, initialized at boot (`init()` in Node, `load()` in browser). `playerAnim.update()` called in `updatePlayer()`. `drawPlayer()`/`drawEnemies()`/`drawMushrooms()` check `sheet.loaded` → use PNG path, else fall back to ASCII `Sprites.*`. The game never goes blank.
+* **45 new harness checks** validate: `computeFrames()` slicing math, `SpriteSheet.init()` headless setup, `SpriteSheet.draw()` no-throw, game sheet initialization, `pickPlayerState()` for all states + edge cases, `AnimController` transitions, frame advancement timing, land timer countdown, reset.
+* **`js/sprites.js`** is kept as a fallback until final art lands (render picks sheet if loaded, else ASCII). Delete when final art is verified in browser.
+
+### Phase 5 kickoff — parallax scrolling
+Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 5". Concrete starting points for this codebase:
+> 💡 **Use web fetch** for design references — parallax scrolling techniques, SMW background layer composition (sky → mountains → hills → trees), layer scroll ratios, and how to pre-composite parallax layers to offscreen canvases for performance. Good direct URLs: `https://en.wikipedia.org/wiki/Parallax_scrolling`, `https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-parallax-scrolling-background--gamedev-9809`, or the NES dev wiki. See §9 for what works.
+1. **New module** — `js/engine/parallax.js`: a `ParallaxLayer` class (or a `createParallax(layers)` factory) that holds a pre-composited offscreen canvas + a scroll factor. Each layer's draw offset = `-(camX * factor) % layerWidth`. The sky layer is static (factor 0), mountains slow (0.15), hills (0.4), trees (0.7). Gameplay tiles stay at factor 1.0.
+2. **Placeholder layer art** — generate simple gradient/silhouette PNGs in `assets/bg/` (or draw them to offscreen canvases in code at boot). Layers should tile horizontally (seamless). Keep `imageSmoothingEnabled = false`.
+3. **Integration in `game.js`** — replace the current `drawBackground()` (solid `#5c94fc` fill) with a multi-layer parallax draw. The parallax layers are drawn **before** `drawTiles()` so gameplay tiles overlay them.
+4. **Acceptance** — all 115 existing harness checks still pass, grid-diff still 1:1, and in a browser: sky is static, mountains scroll slowly, hills/trees scroll faster, all at 60 fps. Add a harness check that validates the parallax offset math (headless: just verify the modulo arithmetic).
 
 
 **Open decisions — RESOLVED in Phase 0:**
@@ -194,10 +209,12 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 3. [x] **Phase 1** — add the JSON level format + `level.js` loader + `tilemap.js`; migrate 1-1 to `assets/levels/w1-1.json` (1:1 behaviour, verified by grid-diff + harness). ✅ done (commits `4578a46`, `b099b59`, `7a8a3de`).
 4. [x] **Phase 2** — decorative autotiling: `bakeAutotile` + `ATLAS` in `tilemap.js`, `#`/`=` ground renders as organic terrain (grass cap / dirt / lit+dark cliff edges / rounded corners); render-only, collision unchanged (9 new harness checks + grid-diff still 1:1). ✅ done (commits `9bc477d`, `76c7542`, `52231d5`).
 5. [x] **Phase 3** — slope / one-way physics core (per-tile height field + semi-solids). ✅ done — 45° `/` `\` slopes with step-up + slide, `-` one-way platforms with drop-through, 22 new harness checks, test level `w1-1-slopes.json`.
-6. [ ] **Phase 4–6** (any order) — sprite sheets + animation controller, parallax, VFX.
-7. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
-8. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).
-9. [ ] Commit incrementally after each phase lands.
+6. [x] **Phase 4** — sprite sheets + animation controller. ✅ done — `spritesheet.js` (PNG loader + frame slicer), `animation.js` (state machine: idle/run/run_fast/skid/jump/fall/land), placeholder PNGs, integrated into `game.js` with ASCII fallback, 45 new harness checks (115 total). Commits `d5a6d5d`, `d149c35`, `d4e543f`.
+7. [ ] **Phase 5** — parallax scrolling (see §3 "Phase 5 kickoff" for concrete starting points).
+8. [ ] **Phase 6** — VFX / "Game Juice" (pooled particle system, dust, coin pops, block bounce, screen shake).
+9. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
+10. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).
+11. [ ] Commit incrementally after each phase lands.
 
 ---
 
@@ -213,7 +230,7 @@ The full upgrade plan now lives in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7: f
 
 ## 9. Environment / gotchas
 - **Dev container is VS Code Linux**; `python3` is available and **Node 22 (arm64) is now installed** (`node`/`npm` via `apt-get`), so you can `node --check` files and run the headless harness (`node test/harness.mjs`). Node is only for dev/validation — the game still runs in a browser with no build step.
-- **Web fetch is available** (the `fetch_web_content` tool) — useful for the design-heavy phases (4–7) to pull references on sprite sheet formats, animation timing, parallax techniques, particle system patterns, SMW art style, etc. **What works:** direct URLs (Wikipedia, documentation sites, game-dev blogs, Nintendo/SNES technical docs). **What doesn't:** Google/Bing SERPs (JS-rendered, returns a redirect stub). If you need to "search", pick a likely direct URL (e.g. a Wikipedia article, a specific GDC talk page, a known dev blog post) and fetch that. Good sources for Phase 4: NES/SNES sprite sheet format references, Mario sprite frame timing data (e.g. `https://www.romhacking.net/wiki/Super_Mario_Bros.` or SNES sprite docs). For Phase 5: parallax scrolling technique articles. For Phase 6: particle system / game juice references (e.g. Johannes Vögele's "Game Feel" concepts).
+- **Web fetch is available** (the `fetch_web_content` tool) — **use it proactively for creative and design challenges** (sprite art style, animation timing, parallax layer composition, particle effects, SMW aesthetics, etc.). It's your design reference library. **What works:** direct URLs (Wikipedia, documentation sites, game-dev blogs, Nintendo/SNES technical docs, Tuts+ tutorials, GDC talk pages). **What doesn't:** Google/Bing SERPs (JS-rendered, returns a redirect stub). If you need to "search", pick a likely direct URL and fetch that. Good sources for **Phase 5 (parallax)**: `https://en.wikipedia.org/wiki/Parallax_scrolling`, `https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-parallax-scrolling-background--gamedev-9809`, NES/SNES background layer mode docs. For **Phase 6 (VFX)**: particle system design articles, Johannes Vögele's "Game Feel" concepts, game juice references. For **Phase 7 (polish)**: SMW art style references, power-up animation timing.
 - The workspace path **contains a space** — always quote it in shell: `"/workspaces/Cline Mario World Test"`.
 - Browser autoplay: WebAudio won't start until a user gesture — that's why we tie `ensure()` to the Enter/title interaction (§6).
 - `~$rio_Project_Summary.docx` is a Word lock file (appears when the `.docx` is open); safe to remove. `.DS_Store` is macOS noise.
