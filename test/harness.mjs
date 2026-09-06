@@ -128,5 +128,74 @@ console.log('[camera  ·  bug #2]');
   check('player is never left behind (always on screen)', visible);
 }
 
+// ---- 9. PHASE 1: level loader (JSON -> typed arrays) + tilemap query API ----
+console.log('[phase 1 · loader + tilemap]');
+{
+  const { parseLevel } = await import('../js/engine/level.js');
+  const { createTilemap } = await import('../js/engine/tilemap.js');
+
+  const raw = {
+    id: 'test', tileSize: 16, width: 8, height: 4,
+    layers: { collision: ['........', '..?.....', '..#.....', '########'] },
+    entities: [
+      { type: 'coin', x: 34, y: 34 },
+      { type: 'goomba', x: 64, y: 34, speed: 0.5 },
+      { type: 'flag', x: 104, baseRow: 3, topRow: 1 },
+    ],
+  };
+
+  // loader: typed arrays
+  const L = parseLevel(raw);
+  check('loader: w/h parsed', L.w === 8 && L.h === 4, `w=${L.w} h=${L.h}`);
+  check('loader: collision is a Uint8Array of w*h bytes',
+    L.layers.collision instanceof Uint8Array && L.layers.collision.length === 8 * 4,
+    'len=' + (L.layers.collision && L.layers.collision.length));
+  check('loader: collision bytes hold the tile chars',
+    L.layers.collision[1 * 8 + 2] === '?'.charCodeAt(0) &&
+    L.layers.collision[2 * 8 + 2] === '#'.charCodeAt(0) &&
+    L.layers.collision[3 * 8 + 0] === '#'.charCodeAt(0));
+  check('loader: optional layers are null when absent',
+    L.layers.background === null && L.layers.foreground === null);
+
+  // loader: entities resolved
+  check('loader: coin resolved to {x,y,w:12,h:12}',
+    L.coins.length === 1 && L.coins[0].x === 34 && L.coins[0].y === 34 && L.coins[0].w === 12 && L.coins[0].h === 12,
+    JSON.stringify(L.coins));
+  check('loader: goomba resolved to {x,y,w:14,h:14,vx:-speed}',
+    L.enemies.length === 1 && L.enemies[0].x === 64 && L.enemies[0].y === 34 &&
+    L.enemies[0].w === 14 && L.enemies[0].h === 14 && L.enemies[0].vx === -0.5,
+    JSON.stringify(L.enemies));
+  check('loader: flag resolved to {col,topRow,baseRow}',
+    L.flag && L.flag.col === 6 && L.flag.topRow === 1 && L.flag.baseRow === 3,
+    JSON.stringify(L.flag));
+
+  // loader: schema check throws on malformed maps
+  const throws = (fn) => { try { fn(); return false; } catch (e) { return true; } };
+  check('loader: rejects non-object', throws(() => parseLevel(null)));
+  check('loader: rejects missing collision layer',
+    throws(() => parseLevel({ width: 8, height: 4, layers: {} })));
+  check('loader: rejects wrong row count',
+    throws(() => parseLevel({ width: 8, height: 4, layers: { collision: ['........'] } })));
+  check('loader: rejects over-wide row',
+    throws(() => parseLevel({ width: 8, height: 4, layers: { collision: ['........', '........', '........', '.........'] } })));
+  check('loader: rejects unknown entity type',
+    throws(() => parseLevel({ width: 8, height: 4, layers: { collision: ['........', '........', '........', '........'] }, entities: [{ type: 'bogus' }] })));
+
+  // tilemap: query API
+  const tm = createTilemap(L);
+  check('tilemap: width/height', tm.width === 8 && tm.height === 4);
+  check('tilemap: tileAt reads the right char', tm.tileAt(2, 1) === '?' && tm.tileAt(2, 2) === '#' && tm.tileAt(0, 3) === '#');
+  check('tilemap: solidAt true for tiles, false for empty', tm.solidAt(2, 2) === true && tm.solidAt(0, 0) === false);
+  tm.set(2, 1, 'U');
+  check('tilemap: set mutates the cell', tm.tileAt(2, 1) === 'U');
+  const rows = tm.rows();
+  check('tilemap: rows() is H arrays of W chars',
+    Array.isArray(rows) && rows.length === 4 && rows[0].length === 8);
+  check('tilemap: rows() reflects the mutation', rows[1][2] === 'U' && rows[2][2] === '#');
+  check('tilemap: copies the source buffer (no aliasing)',
+    L.layers.collision[1 * 8 + 2] === '?'.charCodeAt(0),
+    'src=' + String.fromCharCode(L.layers.collision[1 * 8 + 2]));
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
