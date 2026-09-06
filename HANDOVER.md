@@ -97,6 +97,7 @@ Implemented: `/` `\` (45° solid slopes) + `-` (one-way platform) in the collisi
 
 ### Phase 4 kickoff — sprite sheets + animation controller
 Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 4". Concrete starting points for this codebase:
+> 💡 **Use web fetch** for design references — sprite sheet layout conventions, NES/SNES animation frame timing (e.g. Mario run = 4 frames @ 5–8 frames per cycle), and SMW art style. See §9 for what works.
 1. **New module** — `js/engine/spritesheet.js`: PNG loader (`new Image()` + onload), frame slicing from a grid (cols×rows), and a `draw(ctx, frame, x, y, w, h, flip)` method. Keep `imageSmoothingEnabled = false`.
 2. **New module** — `js/engine/animation.js`: state-based frame controller. API: `setAnim(name)`, `tick()`, `currentFrame()`, `isFlipped()`. States: `idle`, `run`, `jump`, `skid`, `die`. Frame durations in frames (not seconds) to match the 60fps timestep.
 3. **Placeholder PNGs** — generate simple colored-rectangle sprite sheets in code (or as small base64 data URIs) so the engine works before final art is supplied. Store in `assets/sprites/`.
@@ -212,6 +213,7 @@ The full upgrade plan now lives in **`ROADMAP_SNES_UPGRADE.md`** (Phase 0–7: f
 
 ## 9. Environment / gotchas
 - **Dev container is VS Code Linux**; `python3` is available and **Node 22 (arm64) is now installed** (`node`/`npm` via `apt-get`), so you can `node --check` files and run the headless harness (`node test/harness.mjs`). Node is only for dev/validation — the game still runs in a browser with no build step.
+- **Web fetch is available** (the `fetch_web_content` tool) — useful for the design-heavy phases (4–7) to pull references on sprite sheet formats, animation timing, parallax techniques, particle system patterns, SMW art style, etc. **What works:** direct URLs (Wikipedia, documentation sites, game-dev blogs, Nintendo/SNES technical docs). **What doesn't:** Google/Bing SERPs (JS-rendered, returns a redirect stub). If you need to "search", pick a likely direct URL (e.g. a Wikipedia article, a specific GDC talk page, a known dev blog post) and fetch that. Good sources for Phase 4: NES/SNES sprite sheet format references, Mario sprite frame timing data (e.g. `https://www.romhacking.net/wiki/Super_Mario_Bros.` or SNES sprite docs). For Phase 5: parallax scrolling technique articles. For Phase 6: particle system / game juice references (e.g. Johannes Vögele's "Game Feel" concepts).
 - The workspace path **contains a space** — always quote it in shell: `"/workspaces/Cline Mario World Test"`.
 - Browser autoplay: WebAudio won't start until a user gesture — that's why we tie `ensure()` to the Enter/title interaction (§6).
 - `~$rio_Project_Summary.docx` is a Word lock file (appears when the `.docx` is open); safe to remove. `.DS_Store` is macOS noise.
