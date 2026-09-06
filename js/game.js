@@ -12,7 +12,8 @@ import { createInput } from './engine/input.js';
 import { runLoop } from './engine/loop.js';
 import { createCamera } from './engine/camera.js';
 import { Sprites } from './sprites.js';
-import { buildLevel } from './level.js';
+import { loadLevelData, setLevelTransport } from './engine/level.js';
+import { createTilemap } from './engine/tilemap.js';
 import { Chiptune } from './chiptune.js';
 
   const canvas = document.getElementById('game');
@@ -66,7 +67,7 @@ import { Chiptune } from './chiptune.js';
   })();
 
   // --- state ---
-  let grid, W, H, coins, enemies, mushrooms, coinPops, shards, bounces;
+  let tilemap, W, H, coins, enemies, mushrooms, coinPops, shards, bounces;
   let player, camX, score, coinsTotal, lives, timeLeft, timeFrame, frame = 0;
   let state, deathTimer, completeTimer, flagX, flagBaseY, flagSlideDone = false;
   let paused = false, jumpHeld = false, jumpPressed = false;
@@ -81,21 +82,21 @@ import { Chiptune } from './chiptune.js';
   });
   // --- level load / reset ---
   function loadLevel(fullReset) {
-    const L = buildLevel();
-    grid = L.grid; W = L.w; H = L.h; coins = L.coins;
-    flagX = L.flagCol * TILE + 8; flagBaseY = L.flagBaseRow * TILE;
-    enemies = L.enemies.map((e) => ({ x: e.col * TILE, y: e.row * TILE - 14, w: 14, h: 14, vx: -0.5, vy: 0, active: false, dead: false, squish: 0, onGround: false }));
+    tilemap = createTilemap(levelData);
+    W = levelData.w; H = levelData.h; coins = levelData.coins.map((c) => ({ ...c }));
+    flagX = levelData.flag.col * TILE + 8; flagBaseY = levelData.flag.baseRow * TILE;
+    enemies = levelData.enemies.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx, vy: 0, active: false, dead: false, squish: 0, onGround: false }));
     mushrooms = []; coinPops = []; shards = []; bounces = [];
     if (fullReset) { score = 0; coinsTotal = 0; lives = 3; }
     resetPlayer(); camera.reset(0); camX = 0; timeLeft = START_TIME; timeFrame = 0;
   }
   function resetPlayer() {
-    player = { x: 2 * TILE, y: 13 * TILE - SMALL_H, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
+    player = { x: levelData.spawn.x, y: levelData.spawn.y, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
   }
   function startGame() { loadLevel(true); state = 'playing'; Music.start(); }
 
   // --- tile / geometry helpers ---
-  function tileAt(tx, ty) { if (ty < 0 || ty >= H) return '.'; if (tx < 0 || tx >= W) return '#'; return grid[ty][tx]; }
+  function tileAt(tx, ty) { if (ty < 0 || ty >= H) return '.'; if (tx < 0 || tx >= W) return '#'; return tilemap.tileAt(tx, ty); }
   function solidAt(tx, ty) { const c = tileAt(tx, ty); return c !== '.'; }
   function aabb(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
@@ -136,9 +137,9 @@ import { Chiptune } from './chiptune.js';
   // --- block bump (hit from below) ---
   function handleBump(tx, ty) {
     const c = tileAt(tx, ty);
-    if (c === '?') { grid[ty][tx] = 'U'; addScore(200); addCoin(1); spawnCoinPop(tx, ty); SFX.coin(); }
-    else if (c === 'M') { grid[ty][tx] = 'U'; spawnMush(tx, ty); SFX.pow(); }
-    else if (c === 'B') { if (player.big) { grid[ty][tx] = '.'; addScore(50); spawnShards(tx, ty); SFX.brk(); } else { bounces.push({ tx, ty, age: 0 }); SFX.bump(); } }
+    if (c === '?') { tilemap.set(tx, ty, 'U'); addScore(200); addCoin(1); spawnCoinPop(tx, ty); SFX.coin(); }
+    else if (c === 'M') { tilemap.set(tx, ty, 'U'); spawnMush(tx, ty); SFX.pow(); }
+    else if (c === 'B') { if (player.big) { tilemap.set(tx, ty, '.'); addScore(50); spawnShards(tx, ty); SFX.brk(); } else { bounces.push({ tx, ty, age: 0 }); SFX.bump(); } }
     else SFX.bump();
   }
 
@@ -292,7 +293,7 @@ import { Chiptune } from './chiptune.js';
     const s = Math.floor(camX / TILE), e = s + Math.ceil(VIEW_W / TILE) + 1;
     for (let ty = 0; ty < H; ty++) for (let tx = s; tx <= e; tx++) {
       if (tx < 0 || tx >= W) continue;
-      const c = grid[ty][tx]; if (c === '.') continue;
+      const c = tilemap.tileAt(tx, ty); if (c === '.') continue;
       let dx = tx * TILE - camX, dy = ty * TILE + bounceOff(tx, ty);
       drawTile(c, dx, dy);
     }
@@ -403,6 +404,22 @@ import { Chiptune } from './chiptune.js';
     ctx.fillStyle = '#fff'; ctx.font = 'bold 16px monospace'; ctx.fillText('PAUSED', 128, 110);
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   }
+  // --- load level data BEFORE boot (injectable transport: fetch in the
+  //     browser, disk in the Node harness) so loadLevel() stays synchronous
+  //     and the game loop is never made async ---
+  const LEVEL_URL = 'assets/levels/w1-1.json';
+  const isNode = typeof process !== 'undefined' && !!(process.versions && process.versions.node);
+  if (isNode) {
+    const { readFile } = await import('node:fs/promises');
+    const { fileURLToPath } = await import('node:url');
+    const { resolve, dirname } = await import('node:path');
+    const here = dirname(fileURLToPath(import.meta.url));
+    setLevelTransport(async (url) => JSON.parse(await readFile(resolve(here, '..', url), 'utf8')));
+  } else {
+    setLevelTransport((url) => fetch(url).then((r) => { if (!r.ok) throw new Error('level fetch failed: ' + url); return r.json(); }));
+  }
+  const levelData = await loadLevelData(LEVEL_URL);
+
   // --- boot (fixed-timestep loop lives in engine/loop.js) ---
   state = 'title';
   loadLevel(true);
@@ -419,7 +436,7 @@ import { Chiptune } from './chiptune.js';
     get timeLeft() { return timeLeft; },
     get enemies() { return enemies; },
     get frame() { return frame; },
-    get grid() { return grid; },
+    get grid() { return tilemap.rows(); },
     get W() { return W; },
     get H() { return H; },
     get flagX() { return flagX; },
