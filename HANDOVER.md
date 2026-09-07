@@ -1,7 +1,7 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-07. Branch: `master`. **Phases 0 through 6 of the SNES upgrade are complete and committed.**
+> Last updated: 2026-09-07. Branch: `master`. **Phases 0 through 7b of the SNES upgrade are complete and committed.**
 > Phase 0: ES-module refactor + both §5 bugs fixed + headless Node test harness. Phase 1: 3-layer JSON level
 > format + loader + tilemap query API, World 1-1 migrated to `assets/levels/w1-1.json`, and the game switched
 > to the JSON path (verified 1:1 by grid-diff + harness). Phase 2: decorative autotiling — `#`/`=` ground now
@@ -20,8 +20,15 @@
 > system (`engine/particles.js`) — a fixed object pool + free-list reuse (zero per-frame allocation); folds in the
 > old coinPops/shards/bounces (coin → rising+spin+fade **+ a floating `+200` popup**, shards → brick debris,
 > block bounce → `bounceOffset` tile draw-Y) and adds skid dust, landing dust ∝ fall speed, item poof, and a
-> decaying screen shake. 20 new harness checks (153 total).
-> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 7 — SMW Polish & Power-Ups).**
+> decaying screen shake. 20 new harness checks (153 total). Phase 7a: high-score persistence via `localStorage`
+> (feature-detected for headless; `loadHighScore`/`saveHighScore` in `game.js`, tracks best across lives, 5 new
+> harness checks, 158 total). Phase 7b: Fire Flower + fireballs — `F` tile char in level JSON, fireflower entity
+> (emerge animation, collect → fire power, small→fire also grows), fireball spawn (Z key, fire power only, max 1),
+> fireball physics (gravity, ground bounce ×3, wall bounce, off-screen cull), fireball kills enemies (100 pts + squish),
+> side damage degrades fire→big (not straight to small). 15 new harness checks (173 total). Also fixed a `levelData`
+> leak: `loadTestLevel` replaced the module-level `levelData`, so `startGame` now restores `bootLevelData` to
+> prevent cross-phase corruption in the test harness.
+> The one thing we're working on right now: **executing the SNES engine upgrade — see `ROADMAP_SNES_UPGRADE.md` (next: Phase 7c — Koopa Troopa + shell mechanics).**
 
 ---
 
@@ -40,6 +47,7 @@ A **Super-Mario-Bros.-style (NES-era) platformer** written from scratch in **pur
 | `← →` / `A D` | Move |
 | `Space` / `W` / `↑` | Jump (hold = higher) |
 | `Shift` / `X` | Run |
+| `Z` | Fire (fireball, fire power only) |
 | `P` | Pause |
 | `Enter` | Start / restart |
 
@@ -240,8 +248,8 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 6. [x] **Phase 4** — sprite sheets + animation controller. ✅ done — `spritesheet.js` (PNG loader + frame slicer), `animation.js` (state machine: idle/run/run_fast/skid/jump/fall/land), placeholder PNGs, integrated into `game.js` with ASCII fallback, 45 new harness checks (115 total). Commits `d5a6d5d`, `d149c35`, `d4e543f`.
 7. [x] **Phase 5** — parallax scrolling. ✅ done — `engine/parallax.js` (pure `layerOffset` + `ParallaxLayer` + `createParallax`), 5-layer placeholder stack (sky 0 → mountains 0.15 → clouds 0.3 → hills 0.4 → trees 0.7), procedural seamless silhouettes, `drawBackground()` blits the stack before the tiles, 18 new harness checks (133 total).
 8. [x] **Phase 6** — VFX / "Game Juice". ✅ done — `engine/particles.js` (pooled `ParticleSystem`: fixed pool + free-list reuse, zero per-frame allocation; `emit`/`update`/`clear`/`bounceOffset`/`draw(ctx,camX)`), folded in the old coinPops/shards/bounces (coin → rising+spin+fade **+ `+200` popup**, shards → brick debris, block bounce → `bounceOffset` tile draw-Y), new juice (skid dust, landing dust ∝ fall speed, item poof, decaying screen shake), 20 new harness checks (153 total); grid-diff still 1:1.
-9. [ ] **Phase 7a** — high-score persistence via `localStorage` (stub or feature-detect for headless).
-10. [ ] **Phase 7b** — Fire Flower + fireballs (fire power tier, `F` item block, fireball spawn/bounce/kill, fire input key).
+9. [x] **Phase 7a** — high-score persistence via `localStorage`. ✅ done — `loadHighScore`/`saveHighScore` in `game.js` (feature-detected for headless), tracks best score across lives, 5 new harness checks (158 total).
+10. [x] **Phase 7b** — Fire Flower + fireballs. ✅ done — `F` tile char + fireflower block at (46,8) in level JSON, fireflower entity (emerge → collect → fire power; small→fire also grows to h=28), fireball spawn (Z key, fire power only, max 1 active), fireball physics (gravity, ground bounce ×3, wall bounce, off-screen cull), fireball kills enemies on contact (100 pts + squish), side damage degrades fire→big (not straight to small). 15 new harness checks (173 total). Fixed `levelData` leak: `startGame` now restores `bootLevelData` to prevent cross-phase test corruption.
 11. [ ] **Phase 7c** — Koopa Troopa (stomp → shell → kick) + optional flyer, reusing the slope physics.
 12. [ ] **Phase 7d** *(optional stretch)* — world map linking multiple `levels/*.json` + 512-wide mode.
 13. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
