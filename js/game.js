@@ -18,6 +18,7 @@ import { createTilemap, bakeAutotile, ATLAS } from './engine/tilemap.js';
 import { Chiptune } from './chiptune.js';
 import { SpriteSheet } from './engine/spritesheet.js';
 import { AnimController } from './engine/animation.js';
+import { createParallax } from './engine/parallax.js';
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -80,6 +81,56 @@ import { AnimController } from './engine/animation.js';
   const goombaSheet = new SpriteSheet('assets/sprites/goomba.png', 16, 16);
   const mushroomSheet = new SpriteSheet('assets/sprites/mushroom.png', 16, 16);
   const playerAnim = new AnimController();
+
+  // --- Phase 5: parallax background (placeholder art, painted once to
+  //     offscreen canvases at boot; see engine/parallax.js for the engine) ---
+  // The ground surface sits at row 13 (y = 208). Silhouettes are anchored to
+  // that line so they always rest on the terrain regardless of camera x.
+  const BG_GROUND_Y = 208;
+  // Periodic shape helpers: a wave whose period divides the strip width is
+  // seamless when tiled (f(0) === f(width)), so the strips wrap with no seam.
+  function triWave(x, period) {          // pointy peaks: 0 -> 1 -> 0 per period
+    const t = ((x / period) % 2 + 2) % 2;
+    return t < 1 ? t : 2 - t;
+  }
+  function smoothWave(x, period, phase) { // rounded crests: 0..1 per period
+    return 0.5 * (1 + Math.sin((2 * Math.PI * x) / period + (phase || 0)));
+  }
+  // Fill a column silhouette from topFn(x) down to the bottom of the strip.
+  function fillSilhouette(ctx, W, H, color, topFn) {
+    ctx.fillStyle = color;
+    for (let x = 0; x < W; x++) {
+      const top = Math.ceil(topFn(x));
+      if (top < H) ctx.fillRect(x, top, 1, H - top);
+    }
+  }
+  function paintSky(ctx, W, H) { ctx.fillStyle = '#5c94fc'; ctx.fillRect(0, 0, W, H); }
+  function paintMountains(ctx, W, H) {
+    // far range: hazy blue, pointy peaks (periods 192 & 128 both divide 384)
+    fillSilhouette(ctx, W, H, '#5d72c4', (x) => BG_GROUND_Y - 78 * (0.6 * triWave(x, 192) + 0.4 * triWave(x + 64, 128)));
+  }
+  function paintClouds(ctx, W, H) {
+    ctx.fillStyle = '#fcfcfc';
+    const puff = (x, y) => { ctx.fillRect(x + 3, y, 12, 5); ctx.fillRect(x, y + 4, 18, 5); ctx.fillRect(x + 5, y + 9, 8, 2); };
+    puff(30, 24); puff(120, 42); puff(200, 30);   // fully inside the strip -> seamless
+  }
+  function paintHills(ctx, W, H) {
+    // mid range: light green, rolling (periods 256 & 128 both divide 256)
+    fillSilhouette(ctx, W, H, '#57b857', (x) => BG_GROUND_Y - 44 * (0.7 * smoothWave(x, 256) + 0.3 * smoothWave(x, 128, 1.7)));
+  }
+  function paintTrees(ctx, W, H) {
+    // near range: dark green, jagged tree line (periods 64 & 32 both divide 256)
+    fillSilhouette(ctx, W, H, '#2e8f2e', (x) => BG_GROUND_Y - 36 * (0.5 * triWave(x, 64) + 0.5 * triWave(x + 16, 32)));
+  }
+  // Layer stack, back -> front (ROADMAP Phase 5). Gameplay tiles stay at 1.0.
+  const BG_LAYERS = [
+    { name: 'sky',       factor: 0,    width: 256, height: VIEW_H, paint: paintSky },
+    { name: 'mountains', factor: 0.15, width: 384, height: VIEW_H, paint: paintMountains },
+    { name: 'clouds',    factor: 0.3,  width: 256, height: VIEW_H, paint: paintClouds },
+    { name: 'hills',     factor: 0.4,  width: 256, height: VIEW_H, paint: paintHills },
+    { name: 'trees',     factor: 0.7,  width: 256, height: VIEW_H, paint: paintTrees },
+  ];
+  const parallax = createParallax(BG_LAYERS);
 
   // --- input + camera (engine/) ---
   const input = createInput(window);
@@ -382,15 +433,13 @@ import { AnimController } from './engine/animation.js';
   }
 
   function drawBackground() {
-    ctx.fillStyle = '#5c94fc'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    ctx.fillStyle = '#fcfcfc';
-    const c0 = (-camX * 0.4) % 160;
-    for (let x = c0 - 160; x < VIEW_W + 80; x += 160) { cloud(x, 26); cloud(x + 70, 42); }
-    const h0 = (-camX * 0.6) % 120;
-    for (let x = h0 - 120; x < VIEW_W + 80; x += 120) hill(x, 184);
+    // Phase 5: multi-layer parallax (sky -> mountains -> clouds -> hills ->
+    // trees). Drawn before drawTiles() so gameplay tiles overlay the layers.
+    parallax.draw(ctx, camX, VIEW_W);
   }
+  // cloud() is shared with the title screen (drawTitle); the parallax clouds
+  // layer is painted separately at boot.
   function cloud(x, y) { ctx.fillRect(x + 3, y, 12, 5); ctx.fillRect(x, y + 4, 18, 5); ctx.fillRect(x + 5, y + 9, 8, 2); }
-  function hill(x, y) { ctx.fillStyle = '#00a800'; ctx.fillRect(x, y - 6, 56, 6); ctx.fillStyle = '#10b810'; ctx.fillRect(x + 8, y - 12, 40, 6); ctx.fillRect(x + 16, y - 18, 24, 6); }
 
   function drawTiles() {
     const s = Math.floor(camX / TILE), e = s + Math.ceil(VIEW_W / TILE) + 1;
@@ -652,6 +701,8 @@ import { AnimController } from './engine/animation.js';
     get goombaSheet() { return goombaSheet; },
     get mushroomSheet() { return mushroomSheet; },
     get playerAnim() { return playerAnim; },
+    // Phase 5: parallax background access
+    get parallax() { return parallax; },
     startGame,
     // Phase 3 test hook: load a different level data object for testing
     loadTestLevel(data) { levelData = data; loadLevel(true); state = 'playing'; },

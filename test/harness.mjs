@@ -458,6 +458,72 @@ console.log('[phase 4 · animation]');
     G.playerAnim.frame >= 0 && G.playerAnim.frame < 8, 'frame=' + G.playerAnim.frame);
 }
 
+// ============================================================
+// Phase 5: parallax scrolling
+// ============================================================
+console.log('[phase 5 · parallax offset math]');
+{
+  const { layerOffset } = await import('../js/engine/parallax.js');
+  check('layerOffset(0, f, w) === 0', layerOffset(0, 0.5, 100) === 0);
+  check('layerOffset: factor 0 is static', layerOffset(999, 0, 100) === 0);
+  check('layerOffset(100, 0.5, 100) === -50', layerOffset(100, 0.5, 100) === -50, 'got ' + layerOffset(100, 0.5, 100));
+  check('layerOffset(50, 0.5, 100) === -25', layerOffset(50, 0.5, 100) === -25, 'got ' + layerOffset(50, 0.5, 100));
+  check('layerOffset: full wrap -> 0', layerOffset(200, 0.5, 100) === 0, 'got ' + layerOffset(200, 0.5, 100));
+  check('layerOffset: invalid width -> 0', layerOffset(10, 0.5, 0) === 0);
+  // range: always in [-w, 0] across a sweep of camX and every real factor
+  let inRange = true;
+  for (const f of [0, 0.15, 0.3, 0.4, 0.7, 1]) {
+    for (let camX = 0; camX <= 2000; camX += 3) {
+      const ox = layerOffset(camX, f, 137);
+      if (ox < -137 - 1e-9 || ox > 1e-9) { inRange = false; break; }
+    }
+    if (!inRange) break;
+  }
+  check('layerOffset always in [-w, 0] (sweep)', inRange);
+  // periodicity: offset repeats every (w / f) of camX
+  const w = 137, f = 0.25, period = w / f;
+  let periodic = true;
+  for (const camX of [0, 13, 77, 201, 431, 999]) {
+    if (Math.abs(layerOffset(camX + period, f, w) - layerOffset(camX, f, w)) > 1e-9) { periodic = false; break; }
+  }
+  check('layerOffset is periodic (period = w/f)', periodic);
+  // monotonic drift within one period: larger camX -> more negative
+  const o1 = layerOffset(10, 0.5, 100), o2 = layerOffset(20, 0.5, 100);
+  check('layerOffset: larger camX -> more negative (within period)', o2 < o1, `o1=${o1} o2=${o2}`);
+  // large camX stays in range; exact multiple wraps to 0 (seamless)
+  const big = layerOffset(10000, 0.7, 256);
+  check('layerOffset: large camX stays in range', big >= -256 && big <= 0, 'got ' + big);
+  check('layerOffset: camX*f = w -> 0 (seamless wrap)', layerOffset(512, 0.5, 256) === 0, 'got ' + layerOffset(512, 0.5, 256));
+}
+
+console.log('[phase 5 · parallax tiling + game wiring]');
+{
+  const { layerOffset } = await import('../js/engine/parallax.js');
+  check('game: parallax exists with draw()', G.parallax && typeof G.parallax.draw === 'function');
+  check('game: parallax has 5 layers', G.parallax && G.parallax.layers.length === 5, 'got ' + (G.parallax && G.parallax.layers.length));
+  const factors = G.parallax.layers.map(L => L.factor);
+  check('game: layer factors [0, 0.15, 0.3, 0.4, 0.7]',
+    JSON.stringify(factors) === JSON.stringify([0, 0.15, 0.3, 0.4, 0.7]), JSON.stringify(factors));
+  check('game: factors monotonic back->front', G.parallax.layers.every((L, i, a) => i === 0 || a[i - 1].factor <= L.factor));
+  check('game: every layer has canvas + positive size', G.parallax.layers.every(L => L.canvas && L.width > 0 && L.height > 0));
+  // tiling coverage: count drawImage calls for a fixed camX (must cover the view)
+  const camX = 123;
+  const countingCtx = { calls: 0, drawImage() { this.calls++; } };
+  let expected = 0;
+  for (const L of G.parallax.layers) {
+    const ox = layerOffset(camX, L.factor, L.width);
+    expected += Math.ceil((256 - ox) / L.width);
+  }
+  G.parallax.draw(countingCtx, camX, 256);
+  check('parallax.draw tiles all layers to cover the view', countingCtx.calls === expected,
+    `got ${countingCtx.calls} expected ${expected}`);
+  // at camX=0 every layer draws at least once
+  const countingCtx2 = { calls: 0, drawImage() { this.calls++; } };
+  G.parallax.draw(countingCtx2, 0, 256);
+  check('parallax.draw at camX=0 draws >= 1 tile per layer', countingCtx2.calls >= G.parallax.layers.length,
+    'got ' + countingCtx2.calls);
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
 
