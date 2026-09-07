@@ -1,7 +1,7 @@
 # Project Handover — Super Plumber Bros.
 
 > **Read this first if you're picking up the session fresh.**
-> Last updated: 2026-09-06. Branch: `master`. **Phases 0, 1, 2, 3, 4, and 5 of the SNES upgrade are complete and committed.**
+> Last updated: 2026-09-07. Branch: `master`. **Phases 0 through 6 of the SNES upgrade are complete and committed.**
 > Phase 0: ES-module refactor + both §5 bugs fixed + headless Node test harness. Phase 1: 3-layer JSON level
 > format + loader + tilemap query API, World 1-1 migrated to `assets/levels/w1-1.json`, and the game switched
 > to the JSON path (verified 1:1 by grid-diff + harness). Phase 2: decorative autotiling — `#`/`=` ground now
@@ -137,6 +137,18 @@ Implemented: `/` `\` (45° solid slopes) + `-` (one-way platform) in the collisi
 * **Integration in `game.js`:** `const particles = new ParticleSystem(128)` at module top; `particles.update()` in `update()` (replacing the three array loops); `particles.draw(ctx, camX)` in `render()` after `drawCoins()`; `particles.clear()` in `loadLevel()`; `particles` + `shakeMag` exposed via `__internals`.
 * **20 new harness checks** validate: pool bounds (capacity, fill, overflow-drops-returns-null, never-grows), the `alpha = life/max` fade math, the preserved block-bounce sine math (ages 0..10 + expiry + unrelated tile), `emit`/`update`/`draw` no-throw across all kinds under the stub ctx, and live game wiring (pool exposed, capacity 128, landing actually emits into the pool, and the pool drains). All **153** checks pass; grid-diff still reports GRID 1:1 OK.
 
+### Phase 7 kickoff — SMW Polish & Power-Ups (NEXT)
+Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 7". This is the final (stretch) phase and a **bundle of smaller features** — deliver **incrementally** (one feature → harness checks → both gates green → commit → next) in this priority order:
+
+1. **7a — High-score persistence (easiest, do first).** `score` is module-level (`addScore`, `game.js` ~line 267). Add a `highScore` loaded from `localStorage` at boot, written when beaten (gameover / flag). **Gotcha:** the harness stub (`test/browser-stub.mjs`) has **no `localStorage`** — either add a tiny in-memory one to the stub, or feature-detect in the game (`typeof localStorage !== 'undefined'` + try/catch) so it's a safe headless no-op. Draw it in the HUD.
+2. **7b — Fire Flower + fireballs (headline).** New power tier `small → big → fire` (damage: fire → big → small). `player.big` is currently a **boolean** (`collectMush` ~407, `damagePlayer` ~414) — refactor to `player.power` ∈ {`small`,`big`,`fire`} and update every reference (collect / damage / `handleBump` / `drawPlayer`). Add tile char `'F'` to `handleBump` (~292) next to `'M'` (mushroom). Reuse the mushroom spawn/update/draw pattern (~275-283, 396-409) for a `fireflowers` item. New `assets/sprites/fireflower.png` via `tools/gen-sprites.mjs` (see `genMushroom`) + a `SpriteSheet` (`game.js` ~81-83). **Fireballs:** a `fireballs` array; on a new fire key (extend `engine/input.js` with a `firePressed` edge like `jumpPressed`, ~33-41, e.g. `KeyZ`/`KeyJ`), spawn a fireball at the feet moving in `player.facing`, small gravity, bounces off walls + ground a few times, then pops. A fireball that `aabb`s a live enemy kills it (squish + score) and pops on solid blocks.
+3. **7c — Koopa Troopa + shell (+ optional flyer).** New enemy `type` (the enemy map is `game.js` ~156; add a `type` field). Walks like a goomba (`updateEnemies` ~383-393). Stomp → **shell** (stops, `e.shell = true`); touching a shell while moving **kicks** it (launches in player facing, high vx); a moving shell kills other enemies; re-stomp stops it. New `assets/sprites/koopa.png` (2×1: koopa + shell) via gen-sprites; branch in `drawEnemies` (~612). Optional **flyer**: hovers on a sine wave (no gravity).
+4. **7d — World map + 512-wide (optional stretch).** Link multiple `levels/*.json` via a map/select screen (the loader `engine/level.js` already takes a path; add a second level JSON; on flag, advance to the next). 512-wide: bump `VIEW_W` in `constants.js` and re-verify parallax + grid-diff.
+
+**Level authoring (grid-diff gotcha):** `js/level.js` `buildLevel()` is the **source of truth** for the tile grid; `assets/levels/w1-1.json` is generated from it by `tools/generate-w1-1.mjs`, and `tools/grid-diff.mjs` proves they match. So to place a new **tile** (e.g. an `'F'` fire block), edit `buildLevel()` and re-run `node tools/generate-w1-1.mjs` — never hand-edit the JSON collision layer or grid-diff breaks. New **entities** (e.g. Koopa spawns) only live in the JSON `entities` array (grid-diff ignores entities), so those can be added straight into `w1-1.json`.
+
+**Acceptance (whole phase):** all **153** existing checks still pass **plus** new checks per sub-feature; `node tools/grid-diff.mjs` still GRID 1:1 OK; in a browser (`python3 -m http.server 8000`): fire flower → fireballs shoot/bounce/kill, Koopa → shell → kick, and the high score survives a reload. Commit per sub-feature (`Phase 7a: ...`, `Phase 7b: ...`, ...).
+
 **Open decisions — RESOLVED in Phase 0:**
 1. Module system → **ES modules** (native `<script type="module">`, no build step).
 2. Logical resolution → **256×240** (kept; zero disruption, matches current CSS scaling).
@@ -228,9 +240,13 @@ Add `setVolume(v)` (clamp 0..1 → `master.gain.value`) and/or `pause()`/`resume
 6. [x] **Phase 4** — sprite sheets + animation controller. ✅ done — `spritesheet.js` (PNG loader + frame slicer), `animation.js` (state machine: idle/run/run_fast/skid/jump/fall/land), placeholder PNGs, integrated into `game.js` with ASCII fallback, 45 new harness checks (115 total). Commits `d5a6d5d`, `d149c35`, `d4e543f`.
 7. [x] **Phase 5** — parallax scrolling. ✅ done — `engine/parallax.js` (pure `layerOffset` + `ParallaxLayer` + `createParallax`), 5-layer placeholder stack (sky 0 → mountains 0.15 → clouds 0.3 → hills 0.4 → trees 0.7), procedural seamless silhouettes, `drawBackground()` blits the stack before the tiles, 18 new harness checks (133 total).
 8. [x] **Phase 6** — VFX / "Game Juice". ✅ done — `engine/particles.js` (pooled `ParticleSystem`: fixed pool + free-list reuse, zero per-frame allocation; `emit`/`update`/`clear`/`bounceOffset`/`draw(ctx,camX)`), folded in the old coinPops/shards/bounces (coin → rising+spin+fade **+ `+200` popup**, shards → brick debris, block bounce → `bounceOffset` tile draw-Y), new juice (skid dust, landing dust ∝ fall speed, item poof, decaying screen shake), 20 new harness checks (153 total); grid-diff still 1:1.
-9. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
-10. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).
-11. [ ] Commit incrementally after each phase lands.
+9. [ ] **Phase 7a** — high-score persistence via `localStorage` (stub or feature-detect for headless).
+10. [ ] **Phase 7b** — Fire Flower + fireballs (fire power tier, `F` item block, fireball spawn/bounce/kill, fire input key).
+11. [ ] **Phase 7c** — Koopa Troopa (stomp → shell → kick) + optional flyer, reusing the slope physics.
+12. [ ] **Phase 7d** *(optional stretch)* — world map linking multiple `levels/*.json` + 512-wide mode.
+13. [ ] Validate each phase with the **headless harness** (`node test/harness.mjs`) **and** in a browser (`python3 -m http.server 8000`).
+14. [ ] Music track choice (A/B/C) + integration — low priority until the engine core is in place (see §4–§6).
+15. [ ] Commit incrementally after each phase lands.
 
 ---
 
