@@ -126,6 +126,18 @@ Implemented: `/` `\` (45° solid slopes) + `-` (one-way platform) in the collisi
 * **18 new harness checks** validate: `layerOffset` range / periodicity / monotonic drift / seamless-wrap / invalid-width guard; game wiring (5 layers, factors `[0, 0.15, 0.3, 0.4, 0.7]`, monotonic back→front, every layer has a canvas + positive size); and tiling coverage (a counting ctx confirms the draw loop tiles each layer enough times to cover the view). All **133** checks pass; grid-diff still reports GRID 1:1 OK.
 * **Future hook:** the level JSON already has a `"parallax": []` field (documented as "bg image paths"). To swap in real art later, load each path into a canvas and pass it as the layer's `canvas` (skip the procedural `paint`); nothing else changes.
 
+### Phase 6 kickoff — VFX / "Game Juice"
+Full spec: `ROADMAP_SNES_UPGRADE.md` §"Phase 6". Concrete starting points for this codebase:
+> 💡 **Use web fetch** for design references — "game juice" / game feel: pooled particle systems, hit-stop, screen shake, score popups, dust bursts. Good direct URLs: `https://game-feel.com/` (chapters on particles & effects) or a Gamasutra "juice" feature. See §9 for what works in this repo.
+1. **New module** — `js/engine/particles.js`: a **pooled** `ParticleSystem` (fixed-size object pool; reuse dead particles, never allocate per-frame → no GC hitches). A particle = `{ x, y, vx, vy, life, max, size, color, gravity, kind }`. `emit(x, y, opts)` reuses a dead slot or drops the spawn when the pool is full; `update()` advances alive particles; `draw(ctx, camX)` renders with `alpha = life / max` (free fade-out). Keep the core pure and the draw injectable/testable, mirroring the **parallax DI pattern** (a stub ctx in the headless harness).
+2. **Fold in the existing ad-hoc effects** — `game.js` currently keeps **three** separate arrays + loops: `coinPops` (decl 74, reset 150, spawn 262, update 420, draw 544), `shards` (264 / 421 / 560), `bounces` (271 / 422 / 449 / 453). Generalize them onto the pool **without losing behaviour** (the harness already checks coin pops, shards, and block bounce): coin → rising + spinning + fading coin **plus a floating `+200` text popup** (a new `kind`); shards → brick-break debris; block bounce → keep the tile draw-Y offset from `bounceOff()` (line 453) but drive it off the same effect list.
+3. **New juice (the point of the phase):**
+   - **Skid dust** — when `playerAnim.state === 'skid'`, emit small low-gravity dust at the feet (`p.x + p.w/2 - camX`, `p.y + p.h`) every few frames; fast fade.
+   - **Landing dust** — on the fall → `land` transition (`playerAnim.prevState` was `fall`, see `animation.js` line 63), burst a particle count ∝ fall speed.
+   - **Item poof** — radial spark burst when a mushroom appears.
+   - **Screen shake** *(optional)* — decaying sub-pixel camera offset applied in `render()` / `drawBackground()`.
+4. **Integration in `game.js`:** create the system at module top; `update()` it inside `update()` alongside lines 420-422; `draw()` it in `render()` after `drawTiles()` / `drawCoins()` (near `drawShards()`, line 429). Expose via `__internals` (line 684) for the harness.
+5. **Acceptance:** all **133** existing harness checks still pass (coin pop / shards / block bounce preserved), grid-diff still GRID 1:1 OK, and in a browser: skid leaves a dust trail, landings puff ∝ height, coins pop with a `+200` float, hit blocks bounce smoothly, all at 60 fps. Add harness checks for the pool: no growth beyond capacity, `emit`/`update`/`draw` no-throw, and the `alpha = life/max` fade math.
 
 **Open decisions — RESOLVED in Phase 0:**
 1. Module system → **ES modules** (native `<script type="module">`, no build step).
