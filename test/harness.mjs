@@ -5,6 +5,7 @@
 //  Run:  node test/harness.mjs
 // ============================================================
 import { installBrowser } from './browser-stub.mjs';
+import { ParticleSystem } from '../js/engine/particles.js';
 
 let failures = 0, passes = 0;
 function check(name, cond, extra) {
@@ -522,6 +523,97 @@ console.log('[phase 5 · parallax tiling + game wiring]');
   G.parallax.draw(countingCtx2, 0, 256);
   check('parallax.draw at camX=0 draws >= 1 tile per layer', countingCtx2.calls >= G.parallax.layers.length,
     'got ' + countingCtx2.calls);
+}
+
+// ============================================================
+//  PHASE 6 — pooled particle system (VFX / "Game Juice")
+// ============================================================
+console.log('[phase6: particle pool]');
+{
+  const ps = new ParticleSystem(8);
+  check('pool: capacity reflects constructor arg', ps.capacity === 8, 'cap=' + ps.capacity);
+  check('pool: starts empty', ps.alive === 0, 'alive=' + ps.alive);
+
+  for (let i = 0; i < 8; i++) ps.emit(0, 0, { kind: 'dot', life: 5 });
+  check('pool: fills to capacity', ps.alive === 8, 'alive=' + ps.alive);
+
+  const dropped = ps.emit(0, 0, { kind: 'dot', life: 5 });
+  check('pool: overflow spawn is dropped (returns null)', dropped === null);
+  check('pool: never grows beyond capacity', ps.alive === 8, 'alive=' + ps.alive);
+
+  // a life-1 particle retires after a single update
+  const ps0 = new ParticleSystem(4);
+  ps0.emit(0, 0, { kind: 'dot', life: 1 });
+  check('pool: one alive after emit', ps0.alive === 1, 'alive=' + ps0.alive);
+  ps0.update();
+  check('pool: update retires a slot whose life hit 0', ps0.alive === 0, 'alive=' + ps0.alive);
+
+  // alpha = life/max fade math on a surviving particle
+  const ps2 = new ParticleSystem(4);
+  ps2.emit(0, 0, { kind: 'dot', life: 10 });
+  const slot = ps2.pool[0];
+  check('fade: fresh particle life == max', slot.life === 10 && slot.max === 10, `life=${slot.life} max=${slot.max}`);
+  ps2.update();
+  check('fade: life decrements each update', slot.life === 9, 'life=' + slot.life);
+  check('fade: alpha == life/max', Math.abs(slot.life / slot.max - 0.9) < 1e-9, 'alpha=' + (slot.life / slot.max));
+}
+
+// ---- block-bounce sine math preserved (generalized from old bounceOff) ----
+console.log('[phase6: block bounce math]');
+{
+  const ps = new ParticleSystem(4);
+  ps.emit(0, 0, { kind: 'bounce', tx: 3, ty: 4, life: 11 });
+  check('bounce: offset 0 at age 0', ps.bounceOffset(3, 4) === 0, 'off=' + ps.bounceOffset(3, 4));
+  let sineOk = true, detail = '';
+  for (let a = 1; a <= 10; a++) {
+    ps.update();
+    const got = ps.bounceOffset(3, 4);
+    const expect = -Math.round(6 * Math.sin(Math.PI * a / 10));
+    if (got !== expect) { sineOk = false; detail = `age ${a}: got ${got} expect ${expect}`; break; }
+  }
+  check('bounce: ages 1..10 match old sine math', sineOk, detail || 'all match');
+  ps.update(); // age 11 -> expired
+  check('bounce: offset 0 after expiry', ps.bounceOffset(3, 4) === 0, 'off=' + ps.bounceOffset(3, 4));
+  check('bounce: unrelated tile -> 0', ps.bounceOffset(9, 9) === 0, 'off=' + ps.bounceOffset(9, 9));
+}
+
+// ---- emit/update/draw no-throw across every kind (stub 2D ctx) ----
+console.log('[phase6: draw no-throw]');
+{
+  const ps = new ParticleSystem(16);
+  const ctx2d = b.canvas.getContext('2d');
+  const kinds = ['coin', 'shard', 'text', 'dot', 'dust', 'poof', 'bounce'];
+  let threw = null;
+  try {
+    for (const k of kinds) ps.emit(10, 10, { kind: k, text: k === 'text' ? '+200' : undefined, tx: 1, ty: 1, life: 5 });
+    ps.update();
+    ps.draw(ctx2d, 0);
+  } catch (e) { threw = e; }
+  check('draw: no-throw across all particle kinds', threw === null, threw ? String(threw) : 'ok');
+}
+
+// ---- integration: game wiring (the real game drives the pool) ----
+console.log('[phase6: game wiring]');
+{
+  check('wiring: __internals.particles exposed', G.particles && typeof G.particles.emit === 'function', 'type=' + typeof G.particles);
+  check('wiring: game pool capacity is 128', G.particles && G.particles.capacity === 128, 'cap=' + (G.particles && G.particles.capacity));
+  check('wiring: bounceOffset exposed on the game pool', G.particles && typeof G.particles.bounceOffset === 'function');
+
+  // Force a landing: drop the player from a height; landing must emit dust.
+  clearKeys();
+  G.startGame();
+  G.player.x = 32;
+  G.player.y = 40;
+  G.player.vy = 0;
+  G.particles.clear();
+  let sawParticles = false;
+  for (let i = 0; i < 60; i++) { b.advance(1); if (G.particles.alive > 0) { sawParticles = true; break; } }
+  check('wiring: landing emits dust particles into the pool', sawParticles, 'alive stayed 0 for 60 frames');
+
+  // The pool must clean itself up in-game (lifecycle works through update()).
+  let drained = false;
+  for (let i = 0; i < 90; i++) { b.advance(1); if (G.particles.alive === 0) { drained = true; break; } }
+  check('wiring: particles expire and the pool drains', drained, 'alive=' + G.particles.alive);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

@@ -1,6 +1,6 @@
 # SNES "Super Mario World" Engine Upgrade — Roadmap
 
-> **Generated:** 2026-09-05 · **Status:** ✅ **Phases 0–3 delivered & committed** · Phases 4–7 pending (live checklist in `HANDOVER.md` §7)
+> **Generated:** 2026-09-05 · **Status:** ✅ **Phases 0–6 delivered & committed** · Phase 7 (stretch) pending (live checklist in `HANDOVER.md` §7)
 > Companion to `HANDOVER.md`. Step‑by‑step plan for upgrading *Super Plumber Bros.* from a NES‑era single‑layer platformer to a **data‑driven, 16‑bit‑style** engine.
 > ⚠️ Originally a plan-only doc. **Phases 0–3 have since been executed** (ES-module refactor, JSON level format, autotiling, slope/one-way physics — see `HANDOVER.md` §3 for per-phase summaries). Phases 4–7 remain planning.
 
@@ -345,7 +345,7 @@ class Parallax {
 
 ---
 
-## Phase 6 — VFX / "Game Juice"  ★
+## Phase 6 — VFX / "Game Juice"  ★ ✅ DELIVERED
 Generalize the existing `coinPops` / `shards` / `bounces` into one **pooled `ParticleSystem`** (object‑pool → no GC hitches).
 
 | Effect | Trigger | Spec |

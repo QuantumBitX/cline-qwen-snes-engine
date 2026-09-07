@@ -19,6 +19,7 @@ import { Chiptune } from './chiptune.js';
 import { SpriteSheet } from './engine/spritesheet.js';
 import { AnimController } from './engine/animation.js';
 import { createParallax } from './engine/parallax.js';
+import { ParticleSystem } from './engine/particles.js';
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -71,10 +72,10 @@ import { createParallax } from './engine/parallax.js';
   })();
 
   // --- state ---
-  let tilemap, W, H, coins, enemies, mushrooms, coinPops, shards, bounces;
+  let tilemap, W, H, coins, enemies, mushrooms;
   let player, camX, score, coinsTotal, lives, timeLeft, timeFrame, frame = 0;
   let state, deathTimer, completeTimer, flagX, flagBaseY, flagSlideDone = false;
-  let paused = false, jumpHeld = false, jumpPressed = false;
+  let paused = false, jumpHeld = false, jumpPressed = false, shakeMag = 0;
 
   // --- Phase 4: sprite sheets + animation controller ---
   const playerSheet = new SpriteSheet('assets/sprites/player.png', 16, 16);
@@ -132,6 +133,12 @@ import { createParallax } from './engine/parallax.js';
   ];
   const parallax = createParallax(BG_LAYERS);
 
+  // --- Phase 6: pooled particle system (VFX / "Game Juice") ---
+  // A fixed-size object pool; dead slots are reused, nothing is allocated
+  // per-frame. Generalizes the old coinPops / shards / bounces arrays.
+  const particles = new ParticleSystem(128);
+  function addShake(m) { if (m > shakeMag) shakeMag = m; }
+
   // --- input + camera (engine/) ---
   const input = createInput(window);
   const camera = createCamera();
@@ -147,7 +154,7 @@ import { createParallax } from './engine/parallax.js';
     W = levelData.w; H = levelData.h; coins = levelData.coins.map((c) => ({ ...c }));
     flagX = levelData.flag.col * TILE + 8; flagBaseY = levelData.flag.baseRow * TILE;
     enemies = levelData.enemies.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx, vy: 0, active: false, dead: false, squish: 0, onGround: false }));
-    mushrooms = []; coinPops = []; shards = []; bounces = [];
+    mushrooms = []; particles.clear();
     if (fullReset) { score = 0; coinsTotal = 0; lives = 3; }
     resetPlayer(); camera.reset(0); camX = 0; timeLeft = START_TIME; timeFrame = 0;
   }
@@ -259,16 +266,34 @@ import { createParallax } from './engine/parallax.js';
   // --- scoring / spawning ---
   function addScore(n) { score += n; if (score < 0) score = 0; if (score > 999999) score = 999999; }
   function addCoin(n) { coinsTotal += n; if (coinsTotal % 100 === 0 && coinsTotal > 0) { lives++; SFX.pow(); } }
-  function spawnCoinPop(tx, ty) { coinPops.push({ cx: tx * TILE + 8, cy: ty * TILE - 6, vy: -6, life: 22 }); }
-  function spawnMush(tx, ty) { mushrooms.push({ x: tx * TILE + 1, y: ty * TILE - 2, w: 14, h: 14, vx: 1.0, vy: 0, emerging: true, restY: ty * TILE - 15, onGround: false }); }
-  function spawnShards(tx, ty) { const cx = tx * TILE + 8, cy = ty * TILE + 8; for (let i = 0; i < 4; i++) shards.push({ x: cx - 2, y: cy - 2, vx: (i < 2 ? -1.4 : 1.4), vy: (i % 2 ? -3.2 : -1.6), life: 30 }); }
+  function spawnCoinPop(tx, ty) { spawnCoinPopAt(tx * TILE + 8, ty * TILE - 6); }
+  // Phase 6: rising + spinning + fading coin plus a floating +200 score popup
+  function spawnCoinPopAt(px, py) {
+    particles.emit(px, py, { kind: 'coin', vy: -6, gravity: 0.5, life: 22 });
+    particles.emit(px, py, { kind: 'text', text: '+200', vy: -0.6, gravity: 0, life: 38, color: '#fff' });
+  }
+  function spawnMush(tx, ty) {
+    mushrooms.push({ x: tx * TILE + 1, y: ty * TILE - 2, w: 14, h: 14, vx: 1.0, vy: 0, emerging: true, restY: ty * TILE - 15, onGround: false });
+    // Phase 6: item poof (radial spark burst)
+    const cx = tx * TILE + 8, cy = ty * TILE + 8;
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2, spd = 1.0 + Math.random() * 0.9;
+      particles.emit(cx, cy, { kind: 'poof', vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, gravity: 0.04, life: 14 + (Math.random() * 8 | 0), color: i % 2 ? '#ffffff' : '#ffe08a', size: 2 });
+    }
+  }
+  function spawnShards(tx, ty) {
+    const cx = tx * TILE + 8, cy = ty * TILE + 8;
+    for (let i = 0; i < 4; i++) {
+      particles.emit(cx - 2, cy - 2, { kind: 'shard', vx: (i < 2 ? -1.4 : 1.4), vy: (i % 2 ? -3.2 : -1.6), gravity: 0.5, life: 30 });
+    }
+  }
 
   // --- block bump (hit from below) ---
   function handleBump(tx, ty) {
     const c = tileAt(tx, ty);
     if (c === '?') { tilemap.set(tx, ty, 'U'); addScore(200); addCoin(1); spawnCoinPop(tx, ty); SFX.coin(); }
     else if (c === 'M') { tilemap.set(tx, ty, 'U'); spawnMush(tx, ty); SFX.pow(); }
-    else if (c === 'B') { if (player.big) { tilemap.set(tx, ty, '.'); addScore(50); spawnShards(tx, ty); SFX.brk(); } else { bounces.push({ tx, ty, age: 0 }); SFX.bump(); } }
+    else if (c === 'B') { if (player.big) { tilemap.set(tx, ty, '.'); addScore(50); spawnShards(tx, ty); SFX.brk(); addShake(3); } else { particles.emit(tx * TILE, ty * TILE, { kind: 'bounce', tx, ty, life: 11 }); SFX.bump(); } }
     else SFX.bump();
   }
 
@@ -312,16 +337,32 @@ import { createParallax } from './engine/parallax.js';
     p.vy += g; if (p.vy > TERM_VY) p.vy = TERM_VY;
 
     const prevBottom = p.y + p.h;   // BUG #1 fix: remember feet line before moving
+    const wasAirborne = !p.onGround;   // Phase 6: landing detection
+    const fallV = p.vy;                // Phase 6: fall speed for landing dust
     p.bumped = false;
     move(p, true);
     if (p.bumped) handleBump(p.bumpTx, p.bumpTy);
+    // Phase 6: landing dust burst ∝ fall speed (+ a small shake on hard landings)
+    if (p.onGround && wasAirborne && fallV >= 3) {
+      const n = Math.min(12, 2 + (fallV | 0)), fy = p.y + p.h;
+      for (let i = 0; i < n; i++) {
+        particles.emit(p.x + p.w / 2 + (Math.random() - 0.5) * p.w, fy - 1,
+          { kind: 'dust', vx: (Math.random() - 0.5) * 2.4, vy: -(0.4 + Math.random() * 0.9), gravity: 0.06, life: 14 + (Math.random() * 8 | 0), color: '#d8c8a8', size: Math.random() < 0.3 ? 3 : 2 });
+      }
+      addShake(Math.min(2.5, fallV * 0.18));
+    }
 
-    for (let i = coins.length - 1; i >= 0; i--) if (aabb(p, coins[i])) { coins.splice(i, 1); addCoin(1); addScore(200); SFX.coin(); }
+    for (let i = coins.length - 1; i >= 0; i--) if (aabb(p, coins[i])) { const c = coins[i]; coins.splice(i, 1); addCoin(1); addScore(200); SFX.coin(); spawnCoinPopAt(c.x + c.w / 2, c.y + c.h / 2); }
 
     if (p.invuln > 0) p.invuln--;
     // Phase 4: advance the animation state machine
     const inputDir = left ? -1 : right ? 1 : 0;
     playerAnim.update(p, inputDir);
+    // Phase 6: skid dust at the trailing feet (throttled to every other frame)
+    if (playerAnim.state === 'skid' && p.onGround && (frame & 1) === 0) {
+      const fx = p.x + p.w / 2 - p.facing * (p.w / 2);
+      particles.emit(fx, p.y + p.h - 1, { kind: 'dust', vx: -p.facing * (0.4 + Math.random() * 0.6), vy: -(0.2 + Math.random() * 0.5), gravity: 0.05, life: 10 + (Math.random() * 6 | 0), color: '#d8c8a8', size: 2 });
+    }
     checkEnemies(p, prevBottom);
     if (p.y > VIEW_H + 40) killPlayer();
   }
@@ -335,7 +376,7 @@ import { createParallax } from './engine/parallax.js';
       // previous feet position instead of the current overlap depth makes stomps
       // reliable even when the overlap is registered a frame late.
       const fromAbove = prevBottom <= e.y + STOMP_TOL;
-      if (p.vy >= 0 && fromAbove) { e.dead = true; e.squish = 28; p.vy = jumpHeld ? STOMP_HOLD : STOMP; p.y = e.y - p.h; addScore(100); SFX.stomp(); }
+      if (p.vy >= 0 && fromAbove) { e.dead = true; e.squish = 28; p.vy = jumpHeld ? STOMP_HOLD : STOMP; p.y = e.y - p.h; addScore(100); SFX.stomp(); addShake(1.5); }
       else damagePlayer();
     }
   }
@@ -417,16 +458,19 @@ import { createParallax } from './engine/parallax.js';
     updatePlayer();
     updateEnemies();
     updateMushrooms();
-    for (let i = coinPops.length - 1; i >= 0; i--) { const c = coinPops[i]; c.vy += 0.5; c.cy += c.vy; if (--c.life <= 0) coinPops.splice(i, 1); }
-    for (let i = shards.length - 1; i >= 0; i--) { const s = shards[i]; s.vy += 0.5; s.x += s.vx; s.y += s.vy; if (--s.life <= 0) shards.splice(i, 1); }
-    for (let i = bounces.length - 1; i >= 0; i--) { bounces[i].age++; if (bounces[i].age > 10) bounces.splice(i, 1); }
+    particles.update();
+    if (shakeMag > 0) { shakeMag *= 0.85; if (shakeMag < 0.05) shakeMag = 0; }   // Phase 6: decaying screen shake
     updateCamera();
     checkFlag();
   }
   // --- render ---
   function render() {
     if (state === 'title') { drawTitle(); return; }
-    drawBackground(); drawTiles(); drawCoins(); drawCoinPops(); drawCastle(); drawFlag(); drawShards(); drawMushrooms(); drawEnemies(); drawPlayer(); drawHUD();
+    ctx.save();
+    if (shakeMag > 0.05) ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);   // Phase 6: screen shake
+    drawBackground(); drawTiles(); drawCoins(); particles.draw(ctx, camX); drawCastle(); drawFlag(); drawMushrooms(); drawEnemies(); drawPlayer();
+    ctx.restore();
+    drawHUD();
     if (state === 'gameover') drawGameOver();
     if (state === 'win') drawWin();
     if (paused) drawPause();
@@ -450,7 +494,7 @@ import { createParallax } from './engine/parallax.js';
       drawTile(c, dx, dy, tx, ty);
     }
   }
-  function bounceOff(tx, ty) { for (const b of bounces) if (b.tx === tx && b.ty === ty) return -Math.round(6 * Math.sin(Math.PI * b.age / 10)); return 0; }
+  function bounceOff(tx, ty) { return particles.bounceOffset(tx, ty); }   // Phase 6: driven by the particle pool
   function drawTile(c, x, y, tx, ty) {
     if (c === '#' || c === '=') ground(x, y, tilemap.autotile[ty * W + tx]);
     else if (c === 'X') hard(x, y); else if (c === 'B') brick(x, y);
@@ -541,7 +585,6 @@ import { createParallax } from './engine/parallax.js';
     ctx.fillStyle = '#fff0a0'; oval(cx, cy - 1, Math.max(1, rx / 2), 2);
   }
   function drawCoins() { for (const c of coins) drawCoinAt(c.x - camX + c.w / 2, c.y + c.h / 2); }
-  function drawCoinPops() { for (const c of coinPops) drawCoinAt(c.cx - camX, c.cy); }
   function drawCastle() {
     const bx = 166 * TILE - camX; if (bx > VIEW_W + 80 || bx < -80) return;
     const gy = 13 * TILE, w = 48, h = 44, x = bx, y = gy - h;
@@ -557,7 +600,6 @@ import { createParallax } from './engine/parallax.js';
     if (state === 'complete') fy = flagSlideDone ? baseY - 24 : Math.min(baseY - 24, topY + 4 + completeTimer * 0.6);
     ctx.beginPath(); ctx.moveTo(x - 1, fy); ctx.lineTo(x - 13, fy + 5); ctx.lineTo(x - 1, fy + 10); ctx.closePath(); ctx.fill();
   }
-  function drawShards() { for (const s of shards) { ctx.fillStyle = '#c04a10'; ctx.fillRect(s.x - camX, s.y, 4, 4); ctx.fillStyle = '#7a2a08'; ctx.fillRect(s.x - camX, s.y + 3, 4, 1); } }
   function drawMushrooms() {
     for (const m of mushrooms) {
       if (mushroomSheet.loaded) {
@@ -703,6 +745,9 @@ import { createParallax } from './engine/parallax.js';
     get playerAnim() { return playerAnim; },
     // Phase 5: parallax background access
     get parallax() { return parallax; },
+    // Phase 6: pooled particle system + screen shake access
+    get particles() { return particles; },
+    get shakeMag() { return shakeMag; },
     startGame,
     // Phase 3 test hook: load a different level data object for testing
     loadTestLevel(data) { levelData = data; loadLevel(true); state = 'playing'; },
