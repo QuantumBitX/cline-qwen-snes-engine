@@ -8,6 +8,7 @@ import {
   STOMP, STOMP_HOLD, STOMP_TOL,
   PLAYER_W as PW, SMALL_H, BIG_H, INVULN, START_TIME, TIME_TICK,
   MAX_STEP_UP, SLOPE_ACCEL, DROP_TIMER,
+  FIREBALL_SPEED, FIREBALL_GRAV, FIREBALL_BOUNCE, FIREBALL_MAX_BOUNCES, FIREBALL_MAX, FIREBALL_SIZE, KICK_SPEED,
 } from './engine/constants.js';
 import { createInput } from './engine/input.js';
 import { runLoop } from './engine/loop.js';
@@ -94,6 +95,7 @@ import { ParticleSystem } from './engine/particles.js';
   const playerSheet = new SpriteSheet('assets/sprites/player.png', 16, 16);
   const goombaSheet = new SpriteSheet('assets/sprites/goomba.png', 16, 16);
   const mushroomSheet = new SpriteSheet('assets/sprites/mushroom.png', 16, 16);
+  const fireflowerSheet = new SpriteSheet('assets/sprites/fireflower.png', 16, 16);   // Phase 7b
   const playerAnim = new AnimController();
 
   // --- Phase 5: parallax background (placeholder art, painted once to
@@ -172,9 +174,9 @@ import { ParticleSystem } from './engine/particles.js';
     resetPlayer(); camera.reset(0); camX = 0; timeLeft = START_TIME; timeFrame = 0;
   }
   function resetPlayer() {
-    player = { x: levelData.spawn.x, y: levelData.spawn.y, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, onOneWay: false, dropTimer: 0, big: false, facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
+    player = { x: levelData.spawn.x, y: levelData.spawn.y, w: PW, h: SMALL_H, vx: 0, vy: 0, onGround: false, onOneWay: false, dropTimer: 0, power: 'small', facing: 1, invuln: 0, anim: 0, bumped: false, bumpTx: 0, bumpTy: 0 };
   }
-  function startGame() { loadLevel(true); state = 'playing'; Music.start(); }
+  function startGame() { levelData = bootLevelData; loadLevel(true); state = 'playing'; Music.start(); }
 
   // --- tile / geometry helpers ---
   function tileAt(tx, ty) { if (ty < 0 || ty >= H) return '.'; if (tx < 0 || tx >= W) return '#'; return tilemap.tileAt(tx, ty); }
@@ -306,7 +308,8 @@ import { ParticleSystem } from './engine/particles.js';
     const c = tileAt(tx, ty);
     if (c === '?') { tilemap.set(tx, ty, 'U'); addScore(200); addCoin(1); spawnCoinPop(tx, ty); SFX.coin(); }
     else if (c === 'M') { tilemap.set(tx, ty, 'U'); spawnMush(tx, ty); SFX.pow(); }
-    else if (c === 'B') { if (player.big) { tilemap.set(tx, ty, '.'); addScore(50); spawnShards(tx, ty); SFX.brk(); addShake(3); } else { particles.emit(tx * TILE, ty * TILE, { kind: 'bounce', tx, ty, life: 11 }); SFX.bump(); } }
+    else if (c === 'F') { tilemap.set(tx, ty, 'U'); spawnFireflower(tx, ty); SFX.pow(); }   // Phase 7b
+    else if (c === 'B') { if (player.power !== 'small') { tilemap.set(tx, ty, '.'); addScore(50); spawnShards(tx, ty); SFX.brk(); addShake(3); } else { particles.emit(tx * TILE, ty * TILE, { kind: 'bounce', tx, ty, life: 11 }); SFX.bump(); } }
     else SFX.bump();
   }
 
@@ -346,6 +349,9 @@ import { ParticleSystem } from './engine/particles.js';
     } else if (jumpPressed && p.onGround) {
       p.vy = JUMP_VEL; p.onGround = false; SFX.jump();
     }
+
+    // Phase 7b: fire a fireball on the fire key edge (only in fire power)
+    if (firePressed && p.power === 'fire') spawnFireball();
     const g = p.vy < 0 ? (jumpHeld ? GRAV_UP_HELD : GRAV_UP_RELEAS) : GRAV_DOWN;
     p.vy += g; if (p.vy > TERM_VY) p.vy = TERM_VY;
 
@@ -417,14 +423,91 @@ import { ParticleSystem } from './engine/particles.js';
     }
   }
   function collectMush(m) {
-    if (!player.big) { player.big = true; player.y -= (BIG_H - SMALL_H); player.h = BIG_H; player.invuln = 60; }
+    // Mushroom only powers up small -> big (big/fire stay big-tier).
+    if (player.power === 'small') { player.power = 'big'; player.y -= (BIG_H - SMALL_H); player.h = BIG_H; player.invuln = 60; }
     addScore(1000); SFX.pow();
+  }
+
+  // --- Phase 7b: fire flowers ---
+  function spawnFireflower(tx, ty) {
+    fireflowers.push({ x: tx * TILE + 1, y: ty * TILE - 2, w: 14, h: 14, emerging: true, restY: ty * TILE - 15, onGround: false });
+    const cx = tx * TILE + 8, cy = ty * TILE + 8;
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2, spd = 1.0 + Math.random() * 0.9;
+      particles.emit(cx, cy, { kind: 'poof', vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, gravity: 0.04, life: 14 + (Math.random() * 8 | 0), color: i % 2 ? '#ffd27f' : '#ff7a00', size: 2 });
+    }
+  }
+  function updateFireflowers() {
+    for (let i = fireflowers.length - 1; i >= 0; i--) {
+      const f = fireflowers[i];
+      if (f.emerging) { f.y -= 0.5; if (f.y <= f.restY) f.emerging = false; continue; }
+      f.vy = 0; // fire flowers do not walk (they sit where they emerge)
+      if (aabb(player, f)) { collectFireflower(f); fireflowers.splice(i, 1); }
+    }
+  }
+  function collectFireflower(f) {
+    // Fire flower powers up to the fire tier from any state (small grows first).
+    if (player.power !== 'fire') {
+      if (player.power === 'small') { player.y -= (BIG_H - SMALL_H); player.h = BIG_H; }
+      player.power = 'fire'; player.invuln = 60;
+    }
+    addScore(1000); SFX.pow();
+  }
+
+  // --- Phase 7b: fireballs ---
+  function spawnFireball() {
+    if (fireballs.length >= FIREBALL_MAX) return;
+    const p = player;
+    fireballs.push({
+      x: p.x + (p.facing > 0 ? p.w : -FIREBALL_SIZE),
+      y: p.y + p.h - FIREBALL_SIZE - 2,
+      w: FIREBALL_SIZE, h: FIREBALL_SIZE,
+      vx: p.facing * FIREBALL_SPEED, vy: 0, bounces: 0,
+    });
+    SFX.coin(); // reuse a short "pop" blip for the fireball launch
+  }
+  function updateFireballs() {
+    for (let i = fireballs.length - 1; i >= 0; i--) {
+      const fb = fireballs[i];
+      fb.vy += FIREBALL_GRAV; if (fb.vy > 8) fb.vy = 8;
+      // horizontal move + wall bounce
+      const hvx = fb.vx;
+      fb.x += fb.vx;
+      const txL = Math.floor(fb.x / TILE), txR = Math.floor((fb.x + fb.w) / TILE);
+      const ty = Math.floor((fb.y + fb.h / 2) / TILE);
+      if ((fb.vx > 0 && solidAt(txR, ty)) || (fb.vx < 0 && solidAt(txL, ty))) {
+        fb.vx = -hvx; // bounce off wall
+      }
+      // vertical move + ground/ceiling bounce
+      fb.y += fb.vy;
+      const tyL = Math.floor((fb.y + fb.h / 2) / TILE);
+      const cxL = Math.floor((fb.x + 1) / TILE), cxR = Math.floor((fb.x + fb.w - 1) / TILE);
+      if (fb.vy > 0) {
+        // falling: land on a solid surface -> bounce up
+        if (solidAt(cxL, tyL) || solidAt(cxR, tyL)) { fb.y = tyL * TILE - fb.h; fb.vy = -FIREBALL_BOUNCE; fb.bounces++; }
+      } else if (fb.vy < 0) {
+        // rising: hit a ceiling -> stop upward
+        const tyTop = Math.floor(fb.y / TILE);
+        if (solidAt(cxL, tyTop) || solidAt(cxR, tyTop)) { fb.vy = 0; }
+      }
+      // kill on: too many bounces, off-screen
+      if (fb.bounces > FIREBALL_MAX_BOUNCES || fb.y > VIEW_H + 40 || fb.x < -16 || fb.x > W * TILE + 16) {
+        particles.emit(fb.x + fb.w / 2, fb.y + fb.h / 2, { kind: 'poof', vx: 0, vy: -0.4, gravity: 0.05, life: 12, color: '#ff7a00', size: 2 });
+        fireballs.splice(i, 1); continue;
+      }
+      // kill enemies on contact (squish + score, same as a stomp)
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const e = enemies[j];
+        if (!e.dead && aabb(fb, e)) { e.dead = true; e.squish = 28; addScore(100); SFX.stomp(); addShake(1.5); fireballs.splice(i, 1); break; }
+      }
+    }
   }
 
   // --- damage / death ---
   function damagePlayer() {
     if (player.invuln > 0) return;
-    if (player.big) { player.big = false; player.y += (player.h - SMALL_H); player.h = SMALL_H; player.invuln = INVULN; SFX.shrink(); }
+    if (player.power === 'fire') { player.power = 'big'; player.invuln = INVULN; SFX.shrink(); }           // fire -> big (same height)
+    else if (player.power === 'big') { player.power = 'small'; player.y += (player.h - SMALL_H); player.h = SMALL_H; player.invuln = INVULN; SFX.shrink(); } // big -> small
     else killPlayer();
   }
   function killPlayer() { if (state !== 'playing') return; state = 'dying'; player.vy = -9; deathTimer = 0; SFX.die(); Music.stop(); }
@@ -461,6 +544,7 @@ import { ParticleSystem } from './engine/particles.js';
     if (paused) return;
     jumpHeld = input.jumpHeld();
     jumpPressed = input.tickJump();
+    firePressed = input.tickFire();   // Phase 7b: fire edge
 
     if (state === 'title') return;
     if (state === 'gameover' || state === 'win') return;
@@ -471,6 +555,8 @@ import { ParticleSystem } from './engine/particles.js';
     updatePlayer();
     updateEnemies();
     updateMushrooms();
+    updateFireflowers();   // Phase 7b
+    updateFireballs();     // Phase 7b
     particles.update();
     if (shakeMag > 0) { shakeMag *= 0.85; if (shakeMag < 0.05) shakeMag = 0; }   // Phase 6: decaying screen shake
     updateCamera();
@@ -481,7 +567,7 @@ import { ParticleSystem } from './engine/particles.js';
     if (state === 'title') { drawTitle(); return; }
     ctx.save();
     if (shakeMag > 0.05) ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);   // Phase 6: screen shake
-    drawBackground(); drawTiles(); drawCoins(); particles.draw(ctx, camX); drawCastle(); drawFlag(); drawMushrooms(); drawEnemies(); drawPlayer();
+    drawBackground(); drawTiles(); drawCoins(); particles.draw(ctx, camX); drawCastle(); drawFlag(); drawMushrooms(); drawFireflowers(); drawEnemies(); drawFireballs(); drawPlayer();
     ctx.restore();
     drawHUD();
     if (state === 'gameover') drawGameOver();
@@ -511,7 +597,7 @@ import { ParticleSystem } from './engine/particles.js';
   function drawTile(c, x, y, tx, ty) {
     if (c === '#' || c === '=') ground(x, y, tilemap.autotile[ty * W + tx]);
     else if (c === 'X') hard(x, y); else if (c === 'B') brick(x, y);
-    else if (c === '?' || c === 'M') qblock(x, y, ((frame / 8) | 0) % 2); else if (c === 'U') used(x, y);
+    else if (c === '?' || c === 'M' || c === 'F') qblock(x, y, ((frame / 8) | 0) % 2); else if (c === 'U') used(x, y);
     else if (c === 'Q') pipeL(x, y, 1); else if (c === 'W') pipeR(x, y, 1);
     else if (c === 'E') pipeL(x, y, 0); else if (c === 'R') pipeR(x, y, 0);
     else if (c === '/') slopeSlash(x, y);
@@ -622,6 +708,32 @@ import { ParticleSystem } from './engine/particles.js';
       }
     }
   }
+  // Phase 7b: fire flowers (no ASCII fallback needed — the PNG always loads)
+  function drawFireflowers() {
+    for (const f of fireflowers) {
+      if (fireflowerSheet.loaded) {
+        fireflowerSheet.draw(ctx, 0, f.x - camX + (f.w - 16) / 2, f.y + f.h - 16);
+      } else {
+        // minimal fallback: orange disc
+        ctx.fillStyle = '#ff7a00'; ctx.fillRect(f.x - camX + (f.w - 12) / 2, f.y + 2, 12, 12);
+      }
+    }
+  }
+  // Phase 7b: fireballs (procedural — a flickering orange orb)
+  function drawFireballs() {
+    for (const fb of fireballs) {
+      const cx = fb.x - camX + fb.w / 2, cy = fb.y + fb.h / 2;
+      const r = fb.w / 2;
+      ctx.save();
+      ctx.fillStyle = '#ff5a00';
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd200';
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff2b0';
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
   function drawEnemies() {
     for (const e of enemies) {
       const dx = e.x - camX - 1;
@@ -655,7 +767,7 @@ import { ParticleSystem } from './engine/particles.js';
       playerSheet.draw(ctx, fi, dx, dy, { flipX: p.facing < 0 });
     } else {
       // Fallback: ASCII pixel-art
-      const img = p.big ? Sprites.marioBig : (p.onGround ? Sprites.marioSmall : Sprites.marioSmallJump);
+      const img = p.power === 'small' ? (p.onGround ? Sprites.marioSmall : Sprites.marioSmallJump) : Sprites.marioBig;
       const bob = (p.onGround && Math.abs(p.vx) > 0.2 && ((frame >> 2) & 1)) ? -1 : 0;
       drawSprite(img, p.x - camX + (p.w - img.width) / 2, p.y + p.h - img.height + bob, p.facing < 0);
     }
@@ -722,14 +834,16 @@ import { ParticleSystem } from './engine/particles.js';
     setLevelTransport((url) => fetch(url).then((r) => { if (!r.ok) throw new Error('level fetch failed: ' + url); return r.json(); }));
   }
   let levelData = await loadLevelData(LEVEL_URL);
+  const bootLevelData = levelData;   // immutable reference to the original level (startGame always restores this)
 
   // --- Phase 4: initialize sprite sheets (init in Node, load in browser) ---
   if (isNode) {
     playerSheet.init(64, 32);   // 4×2 grid of 16×16
     goombaSheet.init(32, 16);   // 2×1 grid of 16×16
     mushroomSheet.init(16, 16); // 1×1
+    fireflowerSheet.init(16, 16); // 1×1 (Phase 7b)
   } else {
-    await Promise.all([playerSheet.load(), goombaSheet.load(), mushroomSheet.load()]);
+    await Promise.all([playerSheet.load(), goombaSheet.load(), mushroomSheet.load(), fireflowerSheet.load()]);
   }
 
   // --- boot (fixed-timestep loop lives in engine/loop.js) ---
@@ -749,6 +863,9 @@ import { ParticleSystem } from './engine/particles.js';
     get lives() { return lives; },
     get timeLeft() { return timeLeft; },
     get enemies() { return enemies; },
+    get fireballs() { return fireballs; },   // Phase 7b
+    get fireflowers() { return fireflowers; },   // Phase 7b
+
     get frame() { return frame; },
     get grid() { return tilemap.rows(); },
     get W() { return W; },
@@ -759,6 +876,7 @@ import { ParticleSystem } from './engine/particles.js';
     get playerSheet() { return playerSheet; },
     get goombaSheet() { return goombaSheet; },
     get mushroomSheet() { return mushroomSheet; },
+    get fireflowerSheet() { return fireflowerSheet; },   // Phase 7b
     get playerAnim() { return playerAnim; },
     // Phase 5: parallax background access
     get parallax() { return parallax; },

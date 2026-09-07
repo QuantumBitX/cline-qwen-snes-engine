@@ -17,7 +17,7 @@ const b = installBrowser();
 
 // release every movement/jump key so a deterministic test starts clean
 function clearKeys() {
-  for (const c of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'ShiftLeft', 'ShiftRight', 'KeyX']) b.release(c);
+  for (const c of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'ShiftLeft', 'ShiftRight', 'KeyX', 'KeyZ', 'KeyJ']) b.release(c);
 }
 
 const mod = await import('../js/game.js');
@@ -633,6 +633,79 @@ console.log('[phase7a: high score]');
   const stored = localStorage.getItem('spb_highscore');
   check('7a: beaten high score round-trips to localStorage', stored !== null && parseInt(stored, 10) === G.highScore, `stored=${stored} hi=${G.highScore}`);
   check('7a: persisted value is a clean integer string', typeof stored === 'string' && /^\d+$/.test(stored), 'stored=' + stored);
+}
+
+// ---- Phase 7b: fire flower + fireballs ----
+console.log('[phase7b: fire flower + fireballs]');
+{
+  // wiring: the fire-flower sheet is loaded in headless mode
+  check('7b: fireflower sheet is wired + loaded', G.fireflowerSheet && G.fireflowerSheet.loaded === true, 'loaded=' + (G.fireflowerSheet && G.fireflowerSheet.loaded));
+
+  // 1. fire key spawns a fireball (only in fire power)
+  G.startGame(); clearKeys();
+  b.advance(1);
+  let px = G.player;
+  px.power = 'fire'; px.h = 28; px.x = 32; px.y = 180; px.vx = 0; px.vy = 0; px.onGround = true; px.invuln = 0;
+  b.press('KeyZ'); b.advance(1); b.release('KeyZ');
+  check('7b: fire key spawns a fireball', G.fireballs.length === 1, 'n=' + G.fireballs.length);
+  check('7b: fireball launches in the facing direction (vx > 0)', G.fireballs.length === 1 && G.fireballs[0].vx > 0, 'vx=' + (G.fireballs[0] && G.fireballs[0].vx));
+
+  // 2. fire key does nothing when not in fire power
+  G.startGame(); clearKeys(); b.advance(1);
+  px = G.player;
+  px.power = 'small'; px.x = 32; px.y = 194; px.vx = 0; px.vy = 0; px.onGround = true; px.invuln = 0;
+  b.press('KeyZ'); b.advance(1); b.release('KeyZ');
+  check('7b: fire key is ignored in small power', G.fireballs.length === 0, 'n=' + G.fireballs.length);
+
+  // 3. the fireball travels forward
+  G.startGame(); clearKeys();
+  b.advance(1);
+  px = G.player;
+  px.power = 'fire'; px.h = 28; px.x = 32; px.y = 180; px.vx = 0; px.vy = 0; px.onGround = true; px.invuln = 0;
+  b.press('KeyZ'); b.advance(1); b.release('KeyZ');
+  const fx0 = G.fireballs[0].x;
+  for (let k=0;k<8;k++) b.advance(1);
+  check('7b: fireball moves forward (x increases)', G.fireballs.length === 1 && G.fireballs[0].x > fx0, `x ${fx0.toFixed(1)} -> ${(G.fireballs[0] && G.fireballs[0].x).toFixed(1)}`);
+
+  // 4. the fireball bounces off the ground
+  let bounced = false;
+  for (let i = 0; i < 80 && G.fireballs.length; i++) { b.advance(1); if (G.fireballs[0] && G.fireballs[0].bounces > 0) { bounced = true; break; } }
+  check('7b: fireball bounces off the ground', bounced, 'bounces=' + (G.fireballs[0] && G.fireballs[0].bounces));
+
+  // 5. a fireball that hits a live enemy kills it and pops
+  G.startGame(); clearKeys(); b.advance(1);
+  px = G.player;
+  px.power = 'fire'; px.h = 28; px.x = 32; px.y = 180; px.vx = 0; px.vy = 0; px.onGround = true; px.invuln = 0;
+  const e = G.enemies[0];
+  e.x = 52; e.y = 194; e.vy = 0; e.vx = 0; e.active = true; e.dead = false;
+  const scoreBeforeKill = G.score;
+  b.press('KeyZ'); b.advance(1); b.release('KeyZ');
+  let killed = false;
+  for (let i = 0; i < 60; i++) { if (e.dead) { killed = true; break; } if (!G.fireballs.length) break; b.advance(1); }
+  check('7b: fireball kills an enemy on contact', killed, 'e.dead=' + e.dead);
+  check('7b: fireball kill awards 100 points', G.score === scoreBeforeKill + 100, `score ${scoreBeforeKill} -> ${G.score}`);
+  check('7b: fireball pops (removed) after the kill', G.fireballs.length === 0, 'n=' + G.fireballs.length);
+
+  // 6. collecting a fire flower sets power = 'fire' (from small it also grows)
+  G.startGame(); clearKeys(); b.advance(1);
+  px = G.player;
+  px.power = 'small'; px.h = 14; px.x = 32; px.y = 194; px.vx = 0; px.vy = 0; px.onGround = true; px.invuln = 0;
+  G.fireflowers.push({ x: 34, y: 194, w: 14, h: 14, emerging: false, restY: 194, onGround: true });
+  b.advance(1);
+  check('7b: collecting a fire flower sets power to fire', px.power === 'fire', 'power=' + px.power);
+  check('7b: small -> fire also grows the player (h = 28)', px.h === 28, 'h=' + px.h);
+  check('7b: the fire flower is consumed', G.fireflowers.length === 0, 'n=' + G.fireflowers.length);
+
+  // 7. taking damage degrades fire -> big (not straight to small)
+  G.startGame(); clearKeys(); b.advance(1);
+  px = G.player;
+  const e7 = G.enemies[0];
+  px.power = 'fire'; px.h = 28; px.x = 32; px.y = 180; px.vx = 0; px.vy = 0; px.onGround = true; px.invuln = 0;
+  e7.x = px.x; e7.y = px.y; e7.vx = 0; e7.vy = 0; e7.active = true; e7.dead = false;
+  b.advance(1);
+  check('7b: side damage degrades fire -> big', px.power === 'big', 'power=' + px.power);
+  check('7b: player survives a fire->big degradation (still playing)', G.state === 'playing', 'state=' + G.state);
+  check('7b: fire->big keeps the big height (h = 28)', px.h === 28, 'h=' + px.h);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

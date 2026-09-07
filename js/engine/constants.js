@@ -32,6 +32,15 @@ export const SMALL_H = 14;
 export const BIG_H = 28;
 export const INVULN = 120;           // i-frames after shrinking
 
+// --- Phase 7b: fire power + fireballs (SMW fire-analog timing) ---
+export const FIREBALL_SPEED = 6.0;   // horizontal launch speed (px/frame)
+export const FIREBALL_GRAV = 0.22;   // gentle arc gravity (px/frame²)
+export const FIREBALL_BOUNCE = 3.0;  // upward kick off the ground (px/frame)
+export const FIREBALL_MAX_BOUNCES = 3; // pops after this many bounces
+export const FIREBALL_MAX = 2;       // max live fireballs (SMB parity)
+export const FIREBALL_SIZE = 8;      // fireball hitbox (px)
+export const KICK_SPEED = 7.0;       // Phase 7c: kicked-shell launch speed
+
 // --- timer ---
 export const START_TIME = 300;
 export const TIME_TICK = 24;         // frames per second of level-time

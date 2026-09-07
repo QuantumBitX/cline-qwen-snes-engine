@@ -15,6 +15,7 @@ const PREVENT = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Spa
 export function createInput(target) {
   const held = Object.create(null);
   let jumpDown = false, jumpPressed = false;
+  let fireDown = false, firePressed = false;   // Phase 7b: fire-ball edge
   let onKey = null;
 
   target.addEventListener('keydown', (e) => {
@@ -25,6 +26,7 @@ export function createInput(target) {
   target.addEventListener('keyup', (e) => { held[e.code] = false; });
 
   const jumpHeld = () => !!(held['Space'] || held['ArrowUp'] || held['KeyW']);
+  const fireHeld = () => !!(held['KeyZ'] || held['KeyJ']);   // Phase 7b: fire key
 
   return {
     held,
@@ -38,6 +40,16 @@ export function createInput(target) {
       jumpPressed = h && !jumpDown;
       jumpDown = h;
       return jumpPressed;
+    },
+    fireHeld,
+    firePressed: () => firePressed,
+    // Phase 7b: advance the fire edge one logic tick (same not-held->held
+    // semantics as tickJump). Call once per 60fps tick before physics.
+    tickFire() {
+      const h = fireHeld();
+      firePressed = h && !fireDown;
+      fireDown = h;
+      return firePressed;
     },
   };
 }

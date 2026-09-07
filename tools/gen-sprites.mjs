@@ -135,8 +135,37 @@ function genMushroom() {
   console.log('  mushroom.png ' + W + 'x' + H + '  (1x1, 16x16)');
 }
 
+// --- generate: fire flower sheet (1×1 = 16×16) ---
+// Phase 7b. A simple fire-petal flower: orange/red petals, yellow core,
+// green stem — distinct from the mushroom so the fire power reads clearly.
+function genFireflower() {
+  const W = 16, H = 16;
+  const px = solidImage(W, H, 0, 0, 0, 0);
+  const put = (x, y, r, g, b) => { const i = (y * W + x) * 4; px[i] = r; px[i+1] = g; px[i+2] = b; px[i+3] = 255; };
+  // stem (green)
+  for (let y = 11; y < 15; y++) for (let x = 7; x < 9; x++) put(x, y, 40, 180, 60);
+  // petals (orange ring)
+  for (let y = 3; y < 11; y++) for (let x = 3; x < 13; x++) {
+    const dx = x - 7, dy = y - 7, d = Math.sqrt(dx*dx + dy*dy);
+    if (d < 5.5) put(x, y, 255, 140, 0);
+  }
+  // inner petals (red)
+  for (let y = 4; y < 10; y++) for (let x = 4; x < 12; x++) {
+    const dx = x - 7, dy = y - 7, d = Math.sqrt(dx*dx + dy*dy);
+    if (d < 3.2) put(x, y, 220, 42, 8);
+  }
+  // yellow core
+  for (let y = 5; y < 9; y++) for (let x = 5; x < 11; x++) {
+    const dx = x - 7, dy = y - 7, d = Math.sqrt(dx*dx + dy*dy);
+    if (d < 2.0) put(x, y, 255, 220, 0);
+  }
+  writeFileSync(resolve(OUT_DIR, 'fireflower.png'), encodePNG(W, H, px));
+  console.log('  fireflower.png ' + W + 'x' + H + '  (1x1, 16x16)');
+}
+
 console.log('Generating placeholder sprite sheets in ' + OUT_DIR + '/');
 genPlayer();
 genGoomba();
 genMushroom();
+genFireflower();
 console.log('Done.');

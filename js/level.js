@@ -4,7 +4,7 @@
 //  Ground occupies rows 13 & 14. Pits carve the ground.
 //  Tile chars:
 //    '.' empty   '#' ground   'X' hard   'B' brick
-//    '?' coin block   'M' mushroom block   'U' used
+//    '?' coin block   'M' mushroom block   'F' fire-flower block   'U' used
 //    'Q'/'W' pipe cap (left/right)
 //    'E'/'R' pipe body (left/right)
 //  Floating coins 'C' and enemies are returned as entities.
@@ -41,6 +41,7 @@ const TILE = 16;
     pipe(28, 2); pipe(40, 3); pipe(56, 4);            // three growing pipes
 
     B(44, 8, 'M');                                   // mushroom block
+    B(46, 8, 'F');                                   // Phase 7b: fire-flower block
     B(48, 8, 'B'); B(49, 8, 'B'); B(50, 8, 'B'); B(49, 4, '?'); // bricks + high coin block
 
     for (let x = 62; x <= 64; x++) B(x, 8, 'C');      // jump coins before pit 1
