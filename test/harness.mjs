@@ -616,6 +616,25 @@ console.log('[phase6: game wiring]');
   check('wiring: particles expire and the pool drains', drained, 'alive=' + G.particles.alive);
 }
 
+// ---- Phase 7a: high-score persistence (localStorage round-trip) ----
+console.log('[phase7a: high score]');
+{
+  // The stub's localStorage starts empty, so the boot high score is 0 (a real
+  // browser would load a prior run's value here via loadHighScore()).
+  G.startGame(); clearKeys();
+  // Teleport the player to the flag and let the level clear — winning is what
+  // persists the best score to localStorage (saveHighScore on 'win').
+  G.player.x = G.flagX + 5; G.player.y = 194; G.player.vx = 0; G.player.vy = 0;
+  let won = false;
+  for (let i = 0; i < 400; i++) { b.advance(1); if (G.state === 'win') { won = true; break; } }
+  check('7a: reaching the flag clears the level (state win)', won, 'state=' + G.state);
+  check('7a: the clear awarded score', G.score > 0, 'score=' + G.score);
+  check('7a: high score tracks the best (>= final score)', G.highScore >= G.score, `hi=${G.highScore} score=${G.score}`);
+  const stored = localStorage.getItem('spb_highscore');
+  check('7a: beaten high score round-trips to localStorage', stored !== null && parseInt(stored, 10) === G.highScore, `stored=${stored} hi=${G.highScore}`);
+  check('7a: persisted value is a clean integer string', typeof stored === 'string' && /^\d+$/.test(stored), 'stored=' + stored);
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
 

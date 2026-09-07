@@ -72,10 +72,23 @@ import { ParticleSystem } from './engine/particles.js';
   })();
 
   // --- state ---
-  let tilemap, W, H, coins, enemies, mushrooms;
+  let tilemap, W, H, coins, enemies, mushrooms, fireflowers, fireballs;
   let player, camX, score, coinsTotal, lives, timeLeft, timeFrame, frame = 0;
   let state, deathTimer, completeTimer, flagX, flagBaseY, flagSlideDone = false;
-  let paused = false, jumpHeld = false, jumpPressed = false, shakeMag = 0;
+  let paused = false, jumpHeld = false, jumpPressed = false, firePressed = false, shakeMag = 0;
+  let highScore = 0;   // Phase 7a: persisted best score (localStorage)
+
+  // --- Phase 7a: high-score persistence (feature-detected localStorage) ---
+  // The headless stub has no localStorage (a safe no-op here); the browser
+  // provides it. try/catch guards against storage being disabled/throwing.
+  const HS_KEY = 'spb_highscore';
+  function loadHighScore() {
+    try { if (typeof localStorage !== 'undefined') { const v = parseInt(localStorage.getItem(HS_KEY), 10); return isNaN(v) ? 0 : v; } } catch (e) { }
+    return 0;
+  }
+  function saveHighScore() {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(HS_KEY, String(highScore)); } catch (e) { }
+  }
 
   // --- Phase 4: sprite sheets + animation controller ---
   const playerSheet = new SpriteSheet('assets/sprites/player.png', 16, 16);
@@ -154,7 +167,7 @@ import { ParticleSystem } from './engine/particles.js';
     W = levelData.w; H = levelData.h; coins = levelData.coins.map((c) => ({ ...c }));
     flagX = levelData.flag.col * TILE + 8; flagBaseY = levelData.flag.baseRow * TILE;
     enemies = levelData.enemies.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, vx: e.vx, vy: 0, active: false, dead: false, squish: 0, onGround: false }));
-    mushrooms = []; particles.clear();
+    mushrooms = []; fireflowers = []; fireballs = []; particles.clear();
     if (fullReset) { score = 0; coinsTotal = 0; lives = 3; }
     resetPlayer(); camera.reset(0); camX = 0; timeLeft = START_TIME; timeFrame = 0;
   }
@@ -264,7 +277,7 @@ import { ParticleSystem } from './engine/particles.js';
     if (ent.dropTimer > 0) ent.dropTimer--;
   }
   // --- scoring / spawning ---
-  function addScore(n) { score += n; if (score < 0) score = 0; if (score > 999999) score = 999999; }
+  function addScore(n) { score += n; if (score < 0) score = 0; if (score > 999999) score = 999999; if (score > highScore) highScore = score; }
   function addCoin(n) { coinsTotal += n; if (coinsTotal % 100 === 0 && coinsTotal > 0) { lives++; SFX.pow(); } }
   function spawnCoinPop(tx, ty) { spawnCoinPopAt(tx * TILE + 8, ty * TILE - 6); }
   // Phase 6: rising + spinning + fading coin plus a floating +200 score popup
@@ -417,7 +430,7 @@ import { ParticleSystem } from './engine/particles.js';
   function killPlayer() { if (state !== 'playing') return; state = 'dying'; player.vy = -9; deathTimer = 0; SFX.die(); Music.stop(); }
   function updateDying() {
     deathTimer++; player.vy += GRAV_DOWN; if (player.vy > TERM_VY) player.vy = TERM_VY; player.y += player.vy;
-    if (player.y > VIEW_H + 120) { lives--; if (lives > 0) { loadLevel(false); state = 'playing'; Music.start(); } else state = 'gameover'; }
+    if (player.y > VIEW_H + 120) { lives--; if (lives > 0) { loadLevel(false); state = 'playing'; Music.start(); } else { state = 'gameover'; saveHighScore(); } }
   }
   // --- timer / camera / flag ---
   function updateTimer() { timeFrame++; if (timeFrame >= TIME_TICK) { timeFrame = 0; timeLeft--; if (timeLeft <= 0) { timeLeft = 0; killPlayer(); } } }
@@ -439,7 +452,7 @@ import { ParticleSystem } from './engine/particles.js';
     } else {
       player.x += 0.6; player.facing = 1; if (player.x > flagX + 56) player.x = flagX + 56;
     }
-    if (completeTimer > 140) { state = 'win'; Music.stop(); }
+    if (completeTimer > 140) { state = 'win'; Music.stop(); saveHighScore(); }
   }
 
   // --- main update (one 60fps tick) ---
@@ -652,6 +665,7 @@ import { ParticleSystem } from './engine/particles.js';
   function drawHUD() {
     ctx.fillStyle = '#fff'; ctx.textBaseline = 'top'; ctx.font = '8px monospace';
     ctx.fillText('MARIO', 8, 6); ctx.fillText(String(score).padStart(6, '0'), 8, 14);
+    ctx.fillText('HI', 52, 6); ctx.fillText(String(highScore).padStart(6, '0'), 48, 14);   // Phase 7a
     drawCoinAt(84, 10); ctx.fillText('x' + String(coinsTotal % 100).padStart(2, '0'), 92, 14);
     ctx.fillText('WORLD', 140, 6); ctx.fillText('1-1', 150, 14);
     ctx.fillText('TIME', 196, 6); ctx.fillText(String(timeLeft).padStart(3, '0'), 198, 14);
@@ -665,11 +679,12 @@ import { ParticleSystem } from './engine/particles.js';
     ctx.fillStyle = '#fff'; ctx.font = 'bold 18px monospace'; ctx.fillText('SUPER', 128, 58);
     ctx.fillStyle = '#fcb800'; ctx.font = 'bold 20px monospace'; ctx.fillText('PLUMBER BROS.', 128, 80);
     ctx.fillStyle = '#fff'; ctx.font = '8px monospace'; ctx.fillText('A NES-ERA PLATFORMER', 128, 112);
+    ctx.fillStyle = '#fff'; ctx.font = '8px monospace'; ctx.fillText('HI-SCORE ' + String(highScore).padStart(6, '0'), 128, 124);   // Phase 7a
     ctx.fillStyle = '#ffd000'; ctx.font = '9px monospace'; if ((frame >> 4) & 1) ctx.fillText('PRESS ENTER TO START', 128, 140);
     ctx.fillStyle = '#fff'; ctx.font = '8px monospace';
     ctx.fillText('<  >  /  A D : move', 128, 184);
     ctx.fillText('SPACE / W / UP : jump (hold=higher)', 128, 196);
-    ctx.fillText('SHIFT / X : run    P : pause    M : mute', 128, 208);
+    ctx.fillText('SHIFT / X : run    Z / J : fire    P : pause', 128, 208);
     ctx.textAlign = 'left';
   }
   function overlay() { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
@@ -718,6 +733,7 @@ import { ParticleSystem } from './engine/particles.js';
   }
 
   // --- boot (fixed-timestep loop lives in engine/loop.js) ---
+  highScore = loadHighScore();   // Phase 7a: load persisted best score
   state = 'title';
   loadLevel(true);
   runLoop(update, render);
@@ -728,6 +744,7 @@ import { ParticleSystem } from './engine/particles.js';
     get player() { return player; },
     get camX() { return camX; },
     get score() { return score; },
+    get highScore() { return highScore; },   // Phase 7a
     get coins() { return coins; },
     get lives() { return lives; },
     get timeLeft() { return timeLeft; },

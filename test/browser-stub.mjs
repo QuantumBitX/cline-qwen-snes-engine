@@ -55,6 +55,20 @@ export function installBrowser() {
     body: {}, documentElement: {},
   };
 
+  // --- in-memory localStorage (Phase 7a: high-score persistence) ---
+  // The stub previously had NO localStorage; game.js feature-detects it, so a
+  // missing object is a safe no-op. We provide a real in-memory store here so
+  // the harness can prove a beaten high score round-trips (write -> re-read).
+  const _store = Object.create(null);
+  g.localStorage = {
+    getItem: (k) => (k in _store ? _store[k] : null),
+    setItem: (k, v) => { _store[k] = String(v); },
+    removeItem: (k) => { delete _store[k]; },
+    clear: () => { for (const k of Object.keys(_store)) delete _store[k]; },
+    key: (i) => Object.keys(_store)[i] ?? null,
+    get length() { return Object.keys(_store).length; },
+  };
+
   function dispatch(type, code) {
     const ev = { code, key: code, type, repeat: false, preventDefault() {} };
     for (const fn of (listeners[type] || []).slice()) fn(ev);
