@@ -62,7 +62,7 @@ imports everything else.
 | `index.html`               | Canvas + control hints + single `<script type="module">`   |
 | `style.css`                | Layout + crisp `image-rendering: pixelated` scaling        |
 | `js/game.js`               | Physics, collision, entities, HUD, orchestration           |
-| `js/sprites.js`            | Pixel-art sprite data → offscreen canvases                 |
+| `js/sprite-data.js`        | Single source of truth for sprite pixel art (feeds the PNG baker) |
 | `js/level.js`              | Level 1-1 authoring source (`buildLevel`) — JSON is generated from it |
 | `js/chiptune.js`           | WebAudio note engine + track definitions                   |
 | `js/engine/constants.js`   | Every tunable (view, physics, camera, fireballs) in one place |
@@ -76,7 +76,7 @@ imports everything else.
 | `js/engine/parallax.js`    | Multi-layer parallax background                            |
 | `js/engine/particles.js`   | Pooled particle system (dust, coin, poof) + screen shake   |
 | `assets/levels/w1-1.json`  | Level 1-1 data (generated from `js/level.js`)              |
-| `assets/sprites/*.png`     | Sprite sheets (player, goomba, mushroom, fireflower)       |
+| `assets/sprites/*.png`     | Sprite sheets (player small/big/fire, goomba, mushroom, fireflower) |
 
 ### Level authoring
 
@@ -117,7 +117,7 @@ browser stub (no browser required):
 node test/harness.mjs     # or: npm test
 ```
 
-**173 checks** covering: timing, boot, start, movement, jump, stomp vs.
+**182 checks** covering: timing, boot, start, movement, jump, stomp vs.
 side-hit discrimination, flag completion, camera follow/bounds, level loader +
 tilemap, autotiling, slopes + one-way platforms, spritesheets + animation,
 parallax, particles, high-score persistence, and fire flower + fireballs.
@@ -128,13 +128,13 @@ parallax, particles, high-score persistence, and fire flower + fireballs.
 | ------------------------- | -------------------------------------------------------------- |
 | `tools/generate-w1-1.mjs` | Regenerate `assets/levels/w1-1.json` from `buildLevel()`       |
 | `tools/grid-diff.mjs`     | Prove the JSON tilemap is byte-identical to `buildLevel()`     |
-| `tools/gen-sprites.mjs`   | Generate the placeholder PNG sprite sheets                     |
+| `tools/gen-sprites.mjs`   | Bake the real-art PNG sprite sheets from `js/sprite-data.js`   |
 | `tools/browser-smoke.mjs` | Exercise the browser-only path (stubbed `fetch`/`Image`) with no real browser |
 
 ## Roadmap
 
 **Done:** fixed timestep + camera foundations, data-driven tilemaps,
-autotiling, slope physics + one-way platforms, sprite sheets + animation,
+autotiling, slope physics + one-way platforms, real-art sprite sheets + animation,
 parallax, particles / game juice, high-score persistence, fire flower +
 fireballs.
 

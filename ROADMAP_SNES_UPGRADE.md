@@ -1,8 +1,8 @@
 # SNES "Super Mario World" Engine Upgrade — Roadmap
 
-> **Generated:** 2026-09-05 · **Status:** ✅ **Phases 0–6 delivered & committed** · Phase 7 (stretch) pending (live checklist in `HANDOVER.md` §7)
+> **Generated:** 2026-09-05 · **Status:** ✅ **Phases 0–7b delivered & committed** · Phase 7c/7d (stretch) pending (live checklist in `HANDOVER.md` §7)
 > Companion to `HANDOVER.md`. Step‑by‑step plan for upgrading *Super Plumber Bros.* from a NES‑era single‑layer platformer to a **data‑driven, 16‑bit‑style** engine.
-> ⚠️ Originally a plan-only doc. **Phases 0–3 have since been executed** (ES-module refactor, JSON level format, autotiling, slope/one-way physics — see `HANDOVER.md` §3 for per-phase summaries). Phases 4–7 remain planning.
+> ⚠️ Originally a plan-only doc. **Phases 0–7b have since been executed** (ES-module refactor, JSON level format, autotiling, slope/one-way physics, sprite sheets + real art, parallax, VFX, high-score + fire flower/fireballs — see `HANDOVER.md` §3 for per-phase summaries). Phases 7c–7d remain planning.
 
 ---
 
@@ -62,7 +62,7 @@ js/
 
 ---
 
-## Phase 1 — Data‑Driven Multi‑Layer Tilemaps  ★
+## Phase 1 — Data‑Driven Multi‑Layer Tilemaps  ★ ✅ DELIVERED
 Replace the single procedural JS grid with a **JSON, three‑layer** format: `background` / `collision` / `foreground` + a pixel‑anchored `entities` list. Each layer is an array of equal‑length strings; one char = one tile resolved through a shared legend.
 
 ### Level JSON format
@@ -136,7 +136,7 @@ Replace the single procedural JS grid with a **JSON, three‑layer** format: `ba
 
 ---
 
-## Phase 2 — Decorative Autotiling  ★
+## Phase 2 — Decorative Autotiling  ★ ✅ DELIVERED
 Make `#` ground render as organic terrain (grass top, dirt body, lit/shaded corners) instead of a flat repeating block.
 
 ### Algorithm (Moore‑neighbour mask, baked once at load)
@@ -178,7 +178,7 @@ function bakeAutotile(tilemap) {            // run once after load
 
 ---
 
-## Phase 3 — Slope Physics & Semi‑Solids  ★ (core physics)
+## Phase 3 — Slope Physics & Semi‑Solids  ★ ✅ DELIVERED (core physics)
 Replace the flat AABB grid resolution in `move()` with a **per‑tile height‑field** so ground level varies *within* a tile.
 
 ### 3a. Slope as a height field
@@ -265,7 +265,7 @@ function resolveOneWay(ent, prevBottom) {
 
 ---
 
-## Phase 4 — Asset Pipeline: Sprite Sheets + Animation Controller  ★
+## Phase 4 — Asset Pipeline: Sprite Sheets + Animation Controller  ★ ✅ DELIVERED
 Replace ASCII sprites with **PNG sheets** + a **state machine** picking frames from velocity + ground state + power‑up.
 
 ### 4a. `spritesheet.js` — atlas loader + slicer
@@ -320,12 +320,12 @@ function pickPlayerState(p, inputDir) {
 | `hurt`/`grow`/`shrink` | power transitions | short scripted sequences |
 | *(power‑up variants)* | `power ∈ {small, big, fire}` | separate sheet per power |
 
-- **Migration:** player/Goomba/item rendering switch from `Sprites.*` canvases to `SpriteSheet.draw(…)`. Keep `sprites.js` as a **fallback** until final art lands (render picks sheet if loaded, else ASCII) so the game never goes blank.
+- **Migration (done):** player/Goomba/item rendering switched from `Sprites.*` canvases to `SpriteSheet.draw(…)`. Real art landed, so the ASCII `sprites.js` fallback was **removed** and the file **deleted** — rendering is PNG-only.
 - **Acceptance:** player cycles idle→run→skid→jump→fall; skid triggers dust; run frame rate speeds up on sprint; power‑up swaps the active sheet.
 
 ---
 
-## Phase 5 — Parallax Scrolling  ★
+## Phase 5 — Parallax Scrolling  ★ ✅ DELIVERED
 Replace hardcoded `drawBackground()` with a **data‑driven multi‑layer** scroller (the `parallax` array in the level JSON).
 ```js
 class Parallax {
@@ -377,7 +377,7 @@ function emitDust(x, y, n, spread) {
 
 ---
 
-## Phase 7 — SMW Polish & Power‑Ups *(stretch, after core)*
+## Phase 7 — SMW Polish & Power‑Ups *(stretch, after core)* — ✅ 7a/7b DELIVERED · 7c/7d pending
 - **Fire Flower + fireballs** (SMW fire‑power analog), `fire` sheet + state.
 - **Koopa Troopa** (drop shell / kick) + a flyer, using the new slope physics.
 - **High‑score persistence** via `localStorage` (already on the `HANDOVER.md` roadmap).
@@ -396,7 +396,7 @@ function emitDust(x, y, n, spread) {
 | Risk | Mitigation |
 |---|---|
 | Slope/AABB jitter at tile seams | `MARGIN` inset sampling + `MAX_STEP_UP` step‑assist + dev overlay; verify in browser |
-| PNG sheets not yet available | `sprites.js` ASCII fallback stays wired; placeholder autotile sheet generated in code |
+| PNG sheets not yet available | **Resolved** — real sheets baked from `js/sprite-data.js`; the ASCII `sprites.js` fallback was removed |
 | ES‑module change vs "no build step" | native `<script type="module">`; IIFE fallback documented in Phase 0 |
 | 256 vs 512 width churns parallax/level data | lock in Phase 0 `constants.js`; level JSON width is independent either way |
 | 2 known bugs resurface after the physics rewrite | fixed in **Phase 0** before any slope work |
