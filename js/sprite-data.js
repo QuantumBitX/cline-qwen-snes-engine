@@ -2,10 +2,9 @@
 //  sprite-data.js — pixel-art source data (palettes + ASCII rows)
 //
 //  This is the single source of truth for the sprite pixel art.
-//  Plain data only (no DOM), so two consumers can share the exact
-//  same art:
-//    - js/sprites.js          (browser/Node)  -> offscreen canvases
+//  Plain data only (no DOM). It is the one consumer-facing source:
 //    - tools/gen-sprites.mjs  (Node build)    -> baked PNG sheets
+//  The game renders exclusively from those baked PNGs (no ASCII path).
 //
 //  Frames are authored as arrays of 16-wide ASCII strings. Each
 //  character maps to a palette colour; '.', ' ', '_' (or a char

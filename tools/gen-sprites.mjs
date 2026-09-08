@@ -2,9 +2,8 @@
 //  gen-sprites.mjs — bake the real PNG sprite sheets
 //  Run: node tools/gen-sprites.mjs
 //
-//  The pixel art comes from js/sprite-data.js (the same source
-//  js/sprites.js uses for its canvas fallback). This bakes the
-//  ASCII frames into RGBA PNGs with a minimal, dependency-free
+//  The pixel art comes from js/sprite-data.js (the single source
+//  of truth). This bakes the ASCII frames into RGBA PNGs with a minimal, dependency-free
 //  PNG encoder (Node's built-in zlib).
 //
 //  Sheet layout (dimensions + frame order are load-bearing — the

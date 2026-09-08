@@ -13,7 +13,6 @@ import {
 import { createInput } from './engine/input.js';
 import { runLoop } from './engine/loop.js';
 import { createCamera } from './engine/camera.js';
-import { Sprites } from './sprites.js';
 import { loadLevelData, setLevelTransport } from './engine/level.js';
 import { createTilemap, bakeAutotile, ATLAS } from './engine/tilemap.js';
 import { Chiptune } from './chiptune.js';
@@ -703,11 +702,7 @@ import { ParticleSystem } from './engine/particles.js';
   }
   function drawMushrooms() {
     for (const m of mushrooms) {
-      if (mushroomSheet.loaded) {
-        mushroomSheet.draw(ctx, 0, m.x - camX + (m.w - 16) / 2, m.y + m.h - 16);
-      } else {
-        drawSprite(Sprites.mushroom, m.x - camX + (m.w - Sprites.mushroom.width) / 2, m.y + m.h - Sprites.mushroom.height, false);
-      }
+      mushroomSheet.draw(ctx, 0, m.x - camX + (m.w - 16) / 2, m.y + m.h - 16);
     }
   }
   // Phase 7b: fire flowers (no ASCII fallback needed — the PNG always loads)
@@ -739,25 +734,15 @@ import { ParticleSystem } from './engine/particles.js';
   function drawEnemies() {
     for (const e of enemies) {
       const dx = e.x - camX - 1;
-      if (goombaSheet.loaded) {
-        if (e.dead) {
-          ctx.save(); ctx.translate(Math.round(dx), e.y + e.h - 8); ctx.scale(1, 0.5);
-          goombaSheet.draw(ctx, 0, 0, 0);
-          ctx.restore();
-        } else {
-          const fi = (e.active && Math.abs(e.vx) > 0.1) ? ((frame >> 3) & 1) : 0;
-          goombaSheet.draw(ctx, fi, dx, e.y - 2, { flipX: e.vx > 0 });
-        }
+      if (e.dead) {
+        ctx.save(); ctx.translate(Math.round(dx), e.y + e.h - 8); ctx.scale(1, 0.5);
+        goombaSheet.draw(ctx, 0, 0, 0);
+        ctx.restore();
       } else {
-        if (e.dead) { ctx.save(); ctx.translate(dx, e.y + e.h - 6); ctx.scale(1, 0.5); ctx.drawImage(Sprites.goomba, 0, 0); ctx.restore(); }
-        else drawSprite(Sprites.goomba, dx, e.y - 2, false);
+        const fi = (e.active && Math.abs(e.vx) > 0.1) ? ((frame >> 3) & 1) : 0;
+        goombaSheet.draw(ctx, fi, dx, e.y - 2, { flipX: e.vx > 0 });
       }
     }
-  }
-  function drawSprite(img, x, y, flip) {
-    const ix = Math.round(x), iy = Math.round(y);
-    if (!flip) ctx.drawImage(img, ix, iy);
-    else { ctx.save(); ctx.translate(ix + img.width, iy); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0); ctx.restore(); }
   }
   function drawPlayer() {
     const p = player; if (p.invuln > 0 && (frame & 4)) return;
@@ -767,18 +752,11 @@ import { ParticleSystem } from './engine/particles.js';
     // every size (fixes big/fire drawing a fixed 16px cell at the bottom of a
     // 28px hitbox, which made all three power states look identical).
     const sheet = p.power === 'fire' ? playerFireSheet : p.power === 'big' ? playerBigSheet : playerSheet;
-    if (sheet.loaded) {
-      // Phase 4: draw from the PNG sprite sheet
-      const fi = playerAnim.frame;
-      const dx = p.x - camX + (p.w - sheet.cellW) / 2;
-      const dy = p.y + p.h - sheet.cellH;
-      sheet.draw(ctx, fi, dx, dy, { flipX: p.facing < 0 });
-    } else {
-      // Fallback: ASCII pixel-art
-      const img = p.power === 'small' ? (p.onGround ? Sprites.marioSmall : Sprites.marioSmallJump) : Sprites.marioBig;
-      const bob = (p.onGround && Math.abs(p.vx) > 0.2 && ((frame >> 2) & 1)) ? -1 : 0;
-      drawSprite(img, p.x - camX + (p.w - img.width) / 2, p.y + p.h - img.height + bob, p.facing < 0);
-    }
+    // Phase 4: draw from the PNG sprite sheet
+    const fi = playerAnim.frame;
+    const dx = p.x - camX + (p.w - sheet.cellW) / 2;
+    const dy = p.y + p.h - sheet.cellH;
+    sheet.draw(ctx, fi, dx, dy, { flipX: p.facing < 0 });
   }
 
   // --- HUD & screens ---
