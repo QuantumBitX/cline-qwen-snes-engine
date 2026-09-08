@@ -365,6 +365,74 @@ console.log('[phase 3 · integration]');
   G.startGame();
 }
 
+// ---- BUG REGRESSION: pipes must act as walls for small entities ----
+// Regression for the Phase 3 height-field rewrite: the X-axis "entirely above"
+// test used the tile's top surface (surfY), so a tall wall (pipe/stair) whose
+// top sat above a short entity's head read as "above me" and was skipped —
+// letting small Mario and goombas walk straight through pipes. It must test the
+// tile BOTTOM (ty*TILE+TILE) instead. Three of the four assertions below
+// (small-mario blocked/stopped, goomba turns around) fail on the old code.
+console.log('[bug fix · pipes block small mario + goombas]');
+{
+  const { parseLevel } = await import('../js/engine/level.js');
+  const W = 30, H = 15;
+  const rows = [];
+  for (let y = 0; y < H; y++) {
+    let r = '';
+    for (let x = 0; x < W; x++) {
+      if (y === 13 || y === 14) r += '#';                                   // ground
+      else if (y === 11 && (x === 10 || x === 11)) r += (x === 10 ? 'Q' : 'W'); // pipe cap
+      else if (y === 12 && (x === 10 || x === 11)) r += (x === 10 ? 'E' : 'R'); // pipe body
+      else r += '.';
+    }
+    rows.push(r);
+  }
+  const pipeLevel = parseLevel({
+    id: 'pipe-test', tileSize: 16, width: W, height: H,
+    layers: { collision: rows },
+    entities: [
+      { type: 'flag', x: 440, baseRow: 13, topRow: 5 },
+      { type: 'goomba', x: 222, y: 194, speed: 1.0 },
+    ],
+  });
+  G.loadTestLevel(pipeLevel);
+  clearKeys();
+  b.advance(1);
+  const p = G.player;
+  const pipeLeft = 10 * 16;   // 160 (left edge of the pipe)
+  const pipeRight = 12 * 16;  // 192 (right edge of the pipe)
+
+  // 1. small mario walks right into the pipe -> must be blocked, not pass through
+  //    (hold ArrowRight so he keeps walking; without input, friction stops him
+  //    short of the pipe and the wall is never actually reached)
+  p.power = 'small'; p.h = 14;
+  p.x = pipeLeft - 24; p.y = 194; p.vx = 0; p.vy = 0; p.onGround = true; p.invuln = 0;
+  b.press('ArrowRight');
+  for (let i = 0; i < 24; i++) b.advance(1);
+  b.release('ArrowRight');
+  b.advance(1);   // settle: friction brings vx to 0 after the wall stops the player
+  check('pipe: small mario is blocked (right edge does not pass the pipe)',
+    p.x + p.w <= pipeLeft + 1, `right=${(p.x + p.w).toFixed(1)} pipeLeft=${pipeLeft}`);
+  check('pipe: small mario stops at the wall (vx == 0)', p.vx === 0, `vx=${p.vx}`);
+
+  // 2. goomba walks left into the pipe -> must turn around (vx flips to +)
+  const e = G.enemies[0];
+  e.active = true; e.dead = false; e.vx = -1.0; e.vy = 0; e.x = pipeRight + 30; e.y = 194;
+  let flipped = false;
+  // advance until the goomba reacts; on the fixed build it turns around at the
+  // pipe (vx flips +) and the loop breaks; on the buggy build it never flips,
+  // so the "turns around" assertion below fails. 200 frames is ample headroom.
+  for (let i = 0; i < 200; i++) { b.advance(1); if (e.vx > 0) { flipped = true; break; } }
+  check('pipe: goomba turns around at the pipe (vx flips to +)', flipped, `vx=${e.vx}`);
+  check('pipe: goomba does not pass through the pipe', e.x >= pipeRight - 1,
+    `x=${e.x.toFixed(1)} pipeRight=${pipeRight}`);
+
+  // restore w1-1
+  G.startGame();
+}
+
+// ---- Phase 4: sprite sheet + animation controller ----
+
 // ---- Phase 4: sprite sheet + animation controller ----
 console.log('[phase 4 · spritesheet]');
 {

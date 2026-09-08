@@ -202,7 +202,13 @@ import { ParticleSystem } from './engine/particles.js';
         if (!sh) continue;
         const fx = (ent.x + ent.w - tx * TILE) / TILE;
         const surfY = ty * TILE + sh.hL + (sh.hR - sh.hL) * fx;
-        if (surfY <= ent.y || surfY >= ent.y + ent.h) continue;
+        // A tile's solid region is [surfY, tileBottom]. It only fails to block
+        // when it lies entirely above the entity (tileBottom <= ent.y) or
+        // entirely below (surfY >= feet). NOTE: the "above" test must use the
+        // tile BOTTOM, not surfY — using surfY made tall walls (pipes/stairs)
+        // whose top surface sits above a short entity's head read as "above me"
+        // and let small Mario + goombas walk straight through them.
+        if ((ty * TILE + TILE) <= ent.y || surfY >= ent.y + ent.h) continue;
         const climb = (ent.y + ent.h) - surfY;
         if (climb > MAX_STEP_UP) { blocked = true; break; }
         else if (climb > 0 && (stepUpY === null || surfY < stepUpY)) stepUpY = surfY;
@@ -220,7 +226,9 @@ import { ParticleSystem } from './engine/particles.js';
         if (!sh) continue;
         const fx = (ent.x - tx * TILE) / TILE;
         const surfY = ty * TILE + sh.hL + (sh.hR - sh.hL) * fx;
-        if (surfY <= ent.y || surfY >= ent.y + ent.h) continue;
+        // Mirror of the vx>0 branch: "entirely above" must test the tile BOTTOM
+        // (ty*TILE+TILE), not surfY, or short entities clip through tall walls.
+        if ((ty * TILE + TILE) <= ent.y || surfY >= ent.y + ent.h) continue;
         const climb = (ent.y + ent.h) - surfY;
         if (climb > MAX_STEP_UP) { blocked = true; break; }
         else if (climb > 0 && (stepUpY === null || surfY < stepUpY)) stepUpY = surfY;

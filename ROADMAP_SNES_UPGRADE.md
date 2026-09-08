@@ -262,6 +262,24 @@ function resolveOneWay(ent, prevBottom) {
 - **Enemies:** reuse `resolveGroundFall`/`resolveSlopeWall` so Goombas patrol slopes and drop off ledges (keep ledge‑turnaround).
 - **Order per tick:** `integrate → resolveSlopeWall(X) → resolveGroundFall(Y) → resolveOneWay(Y) → step‑down settle`.
 - **Acceptance:** player runs up/down 45° + 22.5° slopes without jitter, lands on one‑way platforms, jumps up through them, drops through with `Down+Jump`; Goombas ride the same terrain.
+### 3g. Regression fix — pipe/stair walls must block short entities (player + Goombas)
+*Status: ✅ fixed + regression-tested (`test/harness.mjs` → `[bug fix · pipes block small mario + goombas]`).*
+
+**Symptom:** small Mario and Goombas walked straight *through* solid 2‑tile pipes (and stair sides). Big Mario was unaffected.
+
+**Root cause:** the Phase 3 height‑field rewrite's X‑axis "entirely above me → skip" test compared the tile's **top surface** (`surfY = ty·TILE + hL`) against the entity's head:
+```js
+if (surfY <= ent.y || surfY >= ent.y + ent.h) continue;   // BUG: top surface
+```
+A pipe body tile's top sits *above* a short entity's head, so `surfY <= ent.y` was true and the tile was skipped — the wall was invisible to a 14‑px‑tall body. Big Mario (h=28) reached up into the tile *above* the pipe body, making the test false, which is why only short entities (small Mario, Goombas) were affected.
+
+**Fix:** test the tile **bottom** for the "above" bound, so a wall whose bottom is at/above the head is still skipped, but a wall the body actually overlaps is not:
+```js
+if ((ty * TILE + TILE) <= ent.y || surfY >= ent.y + ent.h) continue;   // FIXED: tile bottom
+```
+Applied to **both** X‑axis branches (`vx>0` and `vx<0`) in `move()`, `js/game.js` (~L211 / L231). One‑line‑per‑branch change; no structural refactor.
+
+**Regression test:** a 30×15 level with a 2‑tile pipe; small Mario walks right into it (must stop, `vx→0`, right edge ≤ pipe left) and a Goomba walks left into it (must turn around, `vx` flips `+`). The position/velocity assertions fail on the pre‑fix build.
 
 ---
 
