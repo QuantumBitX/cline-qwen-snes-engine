@@ -1,15 +1,31 @@
 // ============================================================
-//  gen-sprites.mjs — generate placeholder PNG sprite sheets
+//  gen-sprites.mjs — bake the real PNG sprite sheets
 //  Run: node tools/gen-sprites.mjs
 //
-//  Creates simple colored-rectangle PNGs in assets/sprites/
-//  so the sprite sheet engine can be tested end-to-end before
-//  final art is produced.
+//  The pixel art comes from js/sprite-data.js (the same source
+//  js/sprites.js uses for its canvas fallback). This bakes the
+//  ASCII frames into RGBA PNGs with a minimal, dependency-free
+//  PNG encoder (Node's built-in zlib).
+//
+//  Sheet layout (dimensions + frame order are load-bearing — the
+//  harness asserts them, and game.js slices the sheet by cell):
+//    player.png     64x32, 4x2 of 16x16
+//                   [0:idle][1:runA][2:runB][3:skid]
+//                   [4:jump][5:fall][6:land][7:reserved]
+//    goomba.png     32x16, 2x1 of 16x16   [0:A][1:B]
+//    mushroom.png   16x16                 [0]
+//    fireflower.png 16x16                 (unchanged procedural art)
 // ============================================================
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  MARIO_PAL, GOOMBA_PAL, MUSH_PAL,
+  marioSmall, marioRunA, marioRunB, marioSkid,
+  marioSmallJump, marioFall, marioLand,
+  goomba, goombaB, mushroom,
+} from '../js/sprite-data.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = resolve(__dirname, '..', 'assets', 'sprites');
@@ -58,17 +74,45 @@ function encodePNG(w, h, pixels) {
   return Buffer.concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
 }
 
-function solidImage(w, h, r, g, b, a = 255) {
-  const px = new Uint8Array(w * h * 4);
-  for (let i = 0; i < w * h; i++) { px[i*4]=r; px[i*4+1]=g; px[i*4+2]=b; px[i*4+3]=a; }
+// --- frame rasterizer: ASCII rows + palette -> 16x16 RGBA cell ---
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/**
+ * Rasterize one frame (rows + palette) into a cellW x cellH RGBA buffer
+ * with a transparent background. Short frames are bottom-aligned so the
+ * feet/base sit on the ground (the cell's bottom edge).
+ */
+function renderFrame(rows, palette, cellW = 16, cellH = 16) {
+  const px = new Uint8Array(cellW * cellH * 4);
+  const top = cellH - rows.length;   // bottom-align
+  for (let i = 0; i < rows.length; i++) {
+    const y = top + i;
+    if (y < 0 || y >= cellH) continue;
+    const row = rows[i];
+    for (let x = 0; x < row.length && x < cellW; x++) {
+      const ch = row[x];
+      if (ch === '.' || ch === ' ' || ch === '_' || ch === undefined) continue;
+      const col = palette[ch];
+      if (!col) continue;
+      const [r, g, b] = hexToRgb(col);
+      const idx = (y * cellW + x) * 4;
+      px[idx] = r; px[idx + 1] = g; px[idx + 2] = b; px[idx + 3] = 255;
+    }
+  }
   return px;
 }
 
-function markCell(px, cellX, cellY, cellW, cellH, r, g, b) {
-  for (let dy = 0; dy < 3; dy++)
-    for (let dx = 0; dx < 3; dx++) {
-      const idx = ((cellY + dy) * cellW + (cellX + dx)) * 4;
-      px[idx]=r; px[idx+1]=g; px[idx+2]=b; px[idx+3]=255;
+/** Copy a cellW x cellH frame buffer into a sheet at (cellX, cellY). */
+function blit(sheet, sheetW, frame, cellW, cellH, cellX, cellY) {
+  for (let y = 0; y < cellH; y++)
+    for (let x = 0; x < cellW; x++) {
+      const si = ((cellY + y) * sheetW + (cellX + x)) * 4;
+      const fi = (y * cellW + x) * 4;
+      sheet[si] = frame[fi]; sheet[si + 1] = frame[fi + 1];
+      sheet[si + 2] = frame[fi + 2]; sheet[si + 3] = frame[fi + 3];
     }
 }
 
@@ -76,61 +120,48 @@ function markCell(px, cellX, cellY, cellW, cellH, r, g, b) {
 function genPlayer() {
   const CW = 16, CH = 16, COLS = 4, ROWS = 2;
   const W = COLS * CW, H = ROWS * CH;
-  const px = solidImage(W, H, 0, 0, 0, 0);
-  const colors = [
-    [220,42,8],[255,140,0],[255,210,0],[0,200,80],
-    [0,100,255],[160,0,255],[0,220,220],[200,200,200],
+  const px = new Uint8Array(W * H * 4);   // transparent
+  // frame order: [0:idle][1:runA][2:runB][3:skid][4:jump][5:fall][6:land][7:reserved]
+  const frames = [
+    [marioSmall, MARIO_PAL],
+    [marioRunA, MARIO_PAL],
+    [marioRunB, MARIO_PAL],
+    [marioSkid, MARIO_PAL],
+    [marioSmallJump, MARIO_PAL],
+    [marioFall, MARIO_PAL],
+    [marioLand, MARIO_PAL],
+    null,   // 7: reserved — stays transparent
   ];
-  for (let i = 0; i < 8; i++) {
+  frames.forEach((f, i) => {
+    if (!f) return;
+    const [rows, pal] = f;
     const col = i % COLS, row = Math.floor(i / COLS);
-    const cx = col * CW, cy = row * CH;
-    for (let y = cy+2; y < cy+CH-2; y++)
-      for (let x = cx+2; x < cx+CW-2; x++) {
-        const idx = (y*W+x)*4;
-        px[idx]=colors[i][0]; px[idx+1]=colors[i][1]; px[idx+2]=colors[i][2]; px[idx+3]=255;
-      }
-    markCell(px, cx, cy, CW, CH, 0, 0, 0);
-  }
+    blit(px, W, renderFrame(rows, pal, CW, CH), CW, CH, col * CW, row * CH);
+  });
   writeFileSync(resolve(OUT_DIR, 'player.png'), encodePNG(W, H, px));
-  console.log('  player.png  ' + W + 'x' + H + '  (4x2 grid, 16x16 cells)');
+  console.log('  player.png   ' + W + 'x' + H + '  (4x2 grid, 16x16 cells)');
 }
 
 // --- generate: goomba sheet (2×1 grid of 16×16 = 32×16) ---
 function genGoomba() {
   const CW = 16, CH = 16, W = 32, H = 16;
-  const px = solidImage(W, H, 0, 0, 0, 0);
-  const colors = [[177,94,30],[140,70,20]];
-  for (let i = 0; i < 2; i++) {
-    const cx = i * CW;
-    for (let y = 2; y < CH-2; y++)
-      for (let x = cx+2; x < cx+CW-2; x++) {
-        const idx = (y*W+x)*4;
-        px[idx]=colors[i][0]; px[idx+1]=colors[i][1]; px[idx+2]=colors[i][2]; px[idx+3]=255;
-      }
-    markCell(px, cx, 0, CW, CH, 0, 0, 0);
-  }
+  const px = new Uint8Array(W * H * 4);   // transparent
+  const frames = [
+    [goomba, GOOMBA_PAL],   // 0: A
+    [goombaB, GOOMBA_PAL],  // 1: B (feet swapped)
+  ];
+  frames.forEach(([rows, pal], i) => {
+    blit(px, W, renderFrame(rows, pal, CW, CH), CW, CH, i * CW, 0);
+  });
   writeFileSync(resolve(OUT_DIR, 'goomba.png'), encodePNG(W, H, px));
-  console.log('  goomba.png  ' + W + 'x' + H + '  (2x1 grid, 16x16 cells)');
+  console.log('  goomba.png   ' + W + 'x' + H + '  (2x1 grid, 16x16 cells)');
 }
 
 // --- generate: mushroom sheet (1×1 = 16×16) ---
 function genMushroom() {
   const W = 16, H = 16;
-  const px = solidImage(W, H, 0, 0, 0, 0);
-  for (let y = 2; y < 10; y++)
-    for (let x = 2; x < 14; x++) {
-      const idx = (y*W+x)*4;
-      px[idx]=220; px[idx+1]=42; px[idx+2]=8; px[idx+3]=255;
-    }
-  for (let y = 10; y < 14; y++)
-    for (let x = 4; x < 12; x++) {
-      const idx = (y*W+x)*4;
-      px[idx]=252; px[idx+1]=252; px[idx+2]=252; px[idx+3]=255;
-    }
-  for (const [dx,dy] of [[5,4],[10,4],[7,7]]) {
-    const idx = (dy*W+dx)*4;
-    px[idx]=252; px[idx+1]=252; px[idx+2]=252; px[idx+3]=255;
-  }
+  const px = new Uint8Array(W * H * 4);   // transparent
+  blit(px, W, renderFrame(mushroom, MUSH_PAL, W, H), W, H, 0, 0);
   writeFileSync(resolve(OUT_DIR, 'mushroom.png'), encodePNG(W, H, px));
   console.log('  mushroom.png ' + W + 'x' + H + '  (1x1, 16x16)');
 }
@@ -140,7 +171,7 @@ function genMushroom() {
 // green stem — distinct from the mushroom so the fire power reads clearly.
 function genFireflower() {
   const W = 16, H = 16;
-  const px = solidImage(W, H, 0, 0, 0, 0);
+  const px = new Uint8Array(W * H * 4);
   const put = (x, y, r, g, b) => { const i = (y * W + x) * 4; px[i] = r; px[i+1] = g; px[i+2] = b; px[i+3] = 255; };
   // stem (green)
   for (let y = 11; y < 15; y++) for (let x = 7; x < 9; x++) put(x, y, 40, 180, 60);
@@ -163,7 +194,7 @@ function genFireflower() {
   console.log('  fireflower.png ' + W + 'x' + H + '  (1x1, 16x16)');
 }
 
-console.log('Generating placeholder sprite sheets in ' + OUT_DIR + '/');
+console.log('Baking real sprite sheets into ' + OUT_DIR + '/');
 genPlayer();
 genGoomba();
 genMushroom();

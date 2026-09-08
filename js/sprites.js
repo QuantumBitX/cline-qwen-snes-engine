@@ -2,7 +2,26 @@
 //  Sprites - pixel-art data + palette -> offscreen canvases
 //  Built once at load. The builder is tolerant: a short row is
 //  padded with transparency, so minor authoring slips are safe.
+//
+//  The pixel art itself (palettes + ASCII rows) now lives in
+//  sprite-data.js so the same source feeds both this canvas
+//  builder and the PNG baker (tools/gen-sprites.mjs).
 // ============================================================
+import {
+  MARIO_PAL, GOOMBA_PAL, MUSH_PAL,
+  marioSmall as marioSmallRows,
+  marioSmallJump as marioSmallJumpRows,
+  marioBig as marioBigRows,
+  marioRunA as marioRunARows,
+  marioRunB as marioRunBRows,
+  marioSkid as marioSkidRows,
+  marioLand as marioLandRows,
+  marioFall as marioFallRows,
+  goomba as goombaRows,
+  goombaB as goombaBRows,
+  mushroom as mushroomRows,
+} from './sprite-data.js';
+
 function buildSprite(rows, palette) {
     let w = 0;
     for (let i = 0; i < rows.length; i++) if (rows[i].length > w) w = rows[i].length;
@@ -21,115 +40,21 @@ function buildSprite(rows, palette) {
     return cv;
   }
 
-  const MARIO_PAL = { r: '#DC2A08', s: '#FAB878', h: '#5B3B1E', b: '#1B5FD6', w: '#FCFCFC', k: '#1A1A1A' };
-  const GOOMBA_PAL = { g: '#B15E1E', d: '#5B3B14', w: '#FCFCFC', k: '#1A1A1A' };
-  const MUSH_PAL = { r: '#DC2A08', w: '#FCFCFC', s: '#FAB878', k: '#1A1A1A' };
+  const marioSmall = buildSprite(marioSmallRows, MARIO_PAL);
+  const marioSmallJump = buildSprite(marioSmallJumpRows, MARIO_PAL);
+  const marioBig = buildSprite(marioBigRows, MARIO_PAL);
+  const goomba = buildSprite(goombaRows, GOOMBA_PAL);
+  const mushroom = buildSprite(mushroomRows, MUSH_PAL);
 
-  const marioSmall = buildSprite([
-    ".....rrrrr......",
-    "....rrrrrrrrr...",
-    "....rrrrrrrrrr..",
-    "....rrrrrrrrrrr.",
-    "....rrrrrrrrrrrr",
-    "....hhsssssss...",
-    "....hssssskss...",
-    "....hshhhhhhs...",
-    "....rrrrrrrrr...",
-    "....rbrrrrrbr...",
-    "....sbbbbbbbs...",
-    "....bbbbbbbb....",
-    "....bbwbbwbb....",
-    "....bbbbbbbb....",
-    ".....hhh.hhh....",
-    "....hhhh.hhhh...",
-  ], MARIO_PAL);
+  // New animation frames (reachable in-browser; the PNG is the primary path)
+  const marioRunA = buildSprite(marioRunARows, MARIO_PAL);
+  const marioRunB = buildSprite(marioRunBRows, MARIO_PAL);
+  const marioSkid = buildSprite(marioSkidRows, MARIO_PAL);
+  const marioLand = buildSprite(marioLandRows, MARIO_PAL);
+  const marioFall = buildSprite(marioFallRows, MARIO_PAL);
+  const goombaB = buildSprite(goombaBRows, GOOMBA_PAL);
 
-  const marioSmallJump = buildSprite([
-    "......rrrr......",
-    "....rrrrrrrr....",
-    "....rrrrrrrrrr..",
-    "....rrrrrrrrrrr.",
-    "....rrrrrrrrrrrr",
-    "....hhsssssss...",
-    "....hssssskss...",
-    "....hshhhhhhs...",
-    ".s..rrrrrrrrr.s.",
-    ".s..bbbbbbbbb.s.",
-    "....bbbbbbbbb...",
-    "....bbwbbwbb....",
-    "....bbbbbbbbb...",
-    ".....bbbbbbbb...",
-    ".....hhhhhhhh...",
-    "....hhhhhhhhhh..",
-  ], MARIO_PAL);
-
-  const marioBig = buildSprite([
-    "......rrrr......",
-    "....rrrrrrrr....",
-    "....rrrrrrrrrr..",
-    "....rrrrrrrrrrr.",
-    "....rrrrrrrrrrrr",
-    "....hhsssssss...",
-    "....hssssskss...",
-    "....hshhhhhhs...",
-    "....rrrrrrrrr...",
-    "....rbrrrrrbr...",
-    "....sbbbbbbbs...",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbwbbwbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbwbbwbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    "....bbbbbbbb....",
-    ".....bbbbbbbb...",
-    ".....bbbbbbbb...",
-    ".....hhhh.hh....",
-    "....hhhh..hhhh..",
-  ], MARIO_PAL);
-
-  const goomba = buildSprite([
-    ".....gggggg.....",
-    "....gggggggg....",
-    "...gggggggggg...",
-    "..gggggggggggg..",
-    "..gwwggggggwwg..",
-    "..gkkggggggkkg..",
-    "..gggggggggggg..",
-    "..gggggggggggg..",
-    "..gggggggggggg..",
-    "..gggggggggggg..",
-    "..gggggggggggg..",
-    ".gggggggggggggg.",
-    ".gggggggggggggg.",
-    ".gggggggggggggg.",
-    ".gggddddddddggg.",
-    ".ggg.dddddd.ggg.",
-  ], GOOMBA_PAL);
-
-  const mushroom = buildSprite([
-    ".....rrrrrr.....",
-    "....rrrrrrrrr...",
-    "...rrwrrrrwrr...",
-    "..rrwrrrrrrwrr..",
-    ".rrrrwrrrrwrrrr.",
-    ".rrrrrrrrrrrrrr.",
-    "rrrrrrrrrrrrrrrr",
-    ".ssssssssssssss.",
-    ".ssssssssssssss.",
-    ".ssssksssskssss.",
-    ".ssssssssssssss.",
-    "..sssskkssssss..",
-    "...ssssssssss...",
-  ], MUSH_PAL);
-
-export const Sprites = { marioSmall, marioSmallJump, marioBig, goomba, mushroom, buildSprite };
+export const Sprites = { marioSmall, marioSmallJump, marioBig, goomba, mushroom, marioRunA, marioRunB, marioSkid, marioLand, marioFall, goombaB, buildSprite };
 
   // Dev validation (open DevTools console to inspect)
   (function () {
