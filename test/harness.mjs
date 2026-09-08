@@ -399,6 +399,25 @@ console.log('[phase 4 · spritesheet]');
   check('game: goombaSheet has 2 frames', G.goombaSheet.frames.length === 2);
   check('game: mushroomSheet loaded', G.mushroomSheet.loaded === true);
   check('game: mushroomSheet has 1 frame', G.mushroomSheet.frames.length === 1);
+  // big + fire player sheets (16x32 cells, same 8-frame order as player.png)
+  check('game: playerBigSheet loaded', G.playerBigSheet.loaded === true);
+  check('game: playerBigSheet has 8 frames', G.playerBigSheet.frames.length === 8);
+  check('game: playerBigSheet cell 16x32', G.playerBigSheet.cellW === 16 && G.playerBigSheet.cellH === 32);
+  check('game: playerFireSheet loaded', G.playerFireSheet.loaded === true);
+  check('game: playerFireSheet has 8 frames', G.playerFireSheet.frames.length === 8);
+  check('game: playerFireSheet cell 16x32', G.playerFireSheet.cellW === 16 && G.playerFireSheet.cellH === 32);
+  // The baked PNG files must match the dimensions game.js inits the sheets to.
+  const { readFileSync: rf } = await import('node:fs');
+  const { resolve: rp, dirname: dn } = await import('node:path');
+  const { fileURLToPath: fup } = await import('node:url');
+  const here = dn(fup(import.meta.url));
+  const pngDim = (name) => { const b = rf(rp(here, '..', 'assets', 'sprites', name)); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+  const [pw, ph] = pngDim('player.png');
+  check('baked player.png is 64x32', pw === 64 && ph === 32, pw + 'x' + ph);
+  const [bw, bh] = pngDim('player-big.png');
+  check('baked player-big.png is 64x64', bw === 64 && bh === 64, bw + 'x' + bh);
+  const [fw, fh] = pngDim('player-fire.png');
+  check('baked player-fire.png is 64x64', fw === 64 && fh === 64, fw + 'x' + fh);
 }
 
 console.log('[phase 4 · animation]');

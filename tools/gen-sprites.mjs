@@ -9,10 +9,12 @@
 //
 //  Sheet layout (dimensions + frame order are load-bearing — the
 //  harness asserts them, and game.js slices the sheet by cell):
-//    player.png     64x32, 4x2 of 16x16
-//                   [0:idle][1:runA][2:runB][3:skid]
-//                   [4:jump][5:fall][6:land][7:reserved]
-//    goomba.png     32x16, 2x1 of 16x16   [0:A][1:B]
+//    player.png       64x32, 4x2 of 16x16
+//                     [0:idle][1:runA][2:runB][3:skid]
+//                     [4:jump][5:fall][6:land][7:reserved]
+//    player-big.png   64x64, 4x2 of 16x32  (same order; marioBig 28-row art)
+//    player-fire.png  64x64, 4x2 of 16x32  (same rows, FIRE_PAL recolour)
+//    goomba.png       32x16, 2x1 of 16x16   [0:A][1:B]
 //    mushroom.png   16x16                 [0]
 //    fireflower.png 16x16                 (unchanged procedural art)
 // ============================================================
@@ -21,9 +23,11 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  MARIO_PAL, GOOMBA_PAL, MUSH_PAL,
+  MARIO_PAL, FIRE_PAL, GOOMBA_PAL, MUSH_PAL,
   marioSmall, marioRunA, marioRunB, marioSkid,
   marioSmallJump, marioFall, marioLand,
+  marioBig, marioBigRunA, marioBigRunB, marioBigSkid,
+  marioBigJump, marioBigFall, marioBigLand,
   goomba, goombaB, mushroom,
 } from '../js/sprite-data.js';
 
@@ -142,6 +146,61 @@ function genPlayer() {
   console.log('  player.png   ' + W + 'x' + H + '  (4x2 grid, 16x16 cells)');
 }
 
+// --- generate: big player sheet (4×2 grid of 16×32 = 64×64) ---
+// Same frame order as player.png, but the 28-row marioBig body (power-up form).
+// The PNG baker bottom-aligns each 28-row frame in the 32px cell, so the feet
+// sit on the cell's bottom edge — game.js derives the draw offset from the
+// 32px cell height to keep the feet flush to the ground.
+function genPlayerBig() {
+  const CW = 16, CH = 32, COLS = 4, ROWS = 2;
+  const W = COLS * CW, H = ROWS * CH;
+  const px = new Uint8Array(W * H * 4);   // transparent
+  const frames = [
+    [marioBig, MARIO_PAL],           // 0: idle
+    [marioBigRunA, MARIO_PAL],       // 1
+    [marioBigRunB, MARIO_PAL],       // 2
+    [marioBigSkid, MARIO_PAL],       // 3
+    [marioBigJump, MARIO_PAL],       // 4
+    [marioBigFall, MARIO_PAL],       // 5
+    [marioBigLand, MARIO_PAL],       // 6
+    null,                            // 7: reserved — stays transparent
+  ];
+  frames.forEach((f, i) => {
+    if (!f) return;
+    const [rows, pal] = f;
+    const col = i % COLS, row = Math.floor(i / COLS);
+    blit(px, W, renderFrame(rows, pal, CW, CH), CW, CH, col * CW, row * CH);
+  });
+  writeFileSync(resolve(OUT_DIR, 'player-big.png'), encodePNG(W, H, px));
+  console.log('  player-big.png ' + W + 'x' + H + '  (4x2 grid, 16x32 cells)');
+}
+
+// --- generate: fire player sheet (4×2 grid of 16×32 = 64×64) ---
+// Identical rows to the big sheet, recoloured with FIRE_PAL (red/white swap).
+function genPlayerFire() {
+  const CW = 16, CH = 32, COLS = 4, ROWS = 2;
+  const W = COLS * CW, H = ROWS * CH;
+  const px = new Uint8Array(W * H * 4);   // transparent
+  const frames = [
+    [marioBig, FIRE_PAL],            // 0: idle
+    [marioBigRunA, FIRE_PAL],        // 1
+    [marioBigRunB, FIRE_PAL],        // 2
+    [marioBigSkid, FIRE_PAL],        // 3
+    [marioBigJump, FIRE_PAL],        // 4
+    [marioBigFall, FIRE_PAL],        // 5
+    [marioBigLand, FIRE_PAL],        // 6
+    null,                            // 7: reserved — stays transparent
+  ];
+  frames.forEach((f, i) => {
+    if (!f) return;
+    const [rows, pal] = f;
+    const col = i % COLS, row = Math.floor(i / COLS);
+    blit(px, W, renderFrame(rows, pal, CW, CH), CW, CH, col * CW, row * CH);
+  });
+  writeFileSync(resolve(OUT_DIR, 'player-fire.png'), encodePNG(W, H, px));
+  console.log('  player-fire.png ' + W + 'x' + H + '  (4x2 grid, 16x32 cells)');
+}
+
 // --- generate: goomba sheet (2×1 grid of 16×16 = 32×16) ---
 function genGoomba() {
   const CW = 16, CH = 16, W = 32, H = 16;
@@ -196,6 +255,8 @@ function genFireflower() {
 
 console.log('Baking real sprite sheets into ' + OUT_DIR + '/');
 genPlayer();
+genPlayerBig();
+genPlayerFire();
 genGoomba();
 genMushroom();
 genFireflower();

@@ -15,6 +15,9 @@
 
 // --- palettes ---
 export const MARIO_PAL = { r: '#DC2A08', s: '#FAB878', h: '#5B3B1E', b: '#1B5FD6', w: '#FCFCFC', k: '#1A1A1A' };
+// Fire recolour: swap the red (r) and white (w) entries of MARIO_PAL so the
+// same big-mario rows read as the fire power-up. Same keys, two colours swapped.
+export const FIRE_PAL = { r: '#FCFCFC', s: '#FAB878', h: '#5B3B1E', b: '#1B5FD6', w: '#DC2A08', k: '#1A1A1A' };
 export const GOOMBA_PAL = { g: '#B15E1E', d: '#5B3B14', w: '#FCFCFC', k: '#1A1A1A' };
 export const MUSH_PAL = { r: '#DC2A08', w: '#FCFCFC', s: '#FAB878', k: '#1A1A1A' };
 
@@ -192,6 +195,204 @@ export const marioBig = [
   ".....bbbbbbbb...",
   ".....hhhh.hh....",
   "....hhhh..hhhh..",
+];
+
+// --- mario (big) variants, 16-wide x 28 tall (= BIG_H) ---
+// player-big.png / player-fire.png 4x2 grid order (same as player.png):
+//   [0:idle][1:runA][2:runB][3:skid][4:jump][5:fall][6:land][7:reserved]
+// The idle frame is marioBig itself; the rest are pose variants of the same
+// 28-row body so the PNG branch can animate the power-up form.
+
+// big runA — mid-stride, feet together
+export const marioBigRunA = [
+  "......rrrr......",
+  "....rrrrrrrr....",
+  "....rrrrrrrrrr..",
+  "....rrrrrrrrrrr.",
+  "....rrrrrrrrrrrr",
+  "....hhsssssss...",
+  "....hssssskss...",
+  "....hshhhhhhs...",
+  "....rrrrrrrrr...",
+  "....rbrrrrrbr...",
+  "....sbbbbbbbs...",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbwbbwbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbwbbwbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  "......hhhh......",
+  ".....hhhhhh.....",
+];
+
+// big runB — wide stride, feet apart
+export const marioBigRunB = [
+  "......rrrr......",
+  "....rrrrrrrr....",
+  "....rrrrrrrrrr..",
+  "....rrrrrrrrrrr.",
+  "....rrrrrrrrrrrr",
+  "....hhsssssss...",
+  "....hssssskss...",
+  "....hshhhhhhs...",
+  "....rrrrrrrrr...",
+  "....rbrrrrrbr...",
+  "....sbbbbbbbs...",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbwbbwbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbwbbwbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  "....hhh...hhh...",
+  "...hhhh...hhhh..",
+];
+
+// big skid — bracing, arms out
+export const marioBigSkid = [
+  "......rrrr......",
+  "....rrrrrrrr....",
+  "....rrrrrrrrrr..",
+  "....rrrrrrrrrrr.",
+  "....rrrrrrrrrrrr",
+  "....hhsssssss...",
+  "....hssssskss...",
+  "....hshhhhhhs...",
+  ".s..rrrrrrrrr.s.",
+  ".s..rbrrrrrbr.s.",
+  "....sbbbbbbbs...",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbwbbwbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbwbbwbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  "....bbbbbbbb....",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....hhhh.hh....",
+  "....hhhh..hhhh..",
+];
+
+// big jump — arms raised, feet tucked
+export const marioBigJump = [
+  "......rrrr......",
+  "....rrrrrrrr....",
+  "....rrrrrrrrrr..",
+  "....rrrrrrrrrrr.",
+  "....rrrrrrrrrrrr",
+  "....hhsssssss...",
+  "....hssssskss...",
+  "....hshhhhhhs...",
+  ".s..rrrrrrrrr.s.",
+  ".s..bbbbbbbbb.s.",
+  "....bbbbbbbbb...",
+  "....bbwbbwbb....",
+  "....bbbbbbbbb...",
+  "....bbbbbbbbb...",
+  "....bbwbbwbb....",
+  "....bbbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....hhhhhhhh...",
+  "....hhhhhhhhhh..",
+];
+
+// big fall — descending, arms lowered
+export const marioBigFall = [
+  "......rrrr......",
+  "....rrrrrrrr....",
+  "....rrrrrrrrrr..",
+  "....rrrrrrrrrrr.",
+  "....rrrrrrrrrrrr",
+  "....hhsssssss...",
+  "....hssssskss...",
+  "....hshhhhhhs...",
+  "....rrrrrrrrr...",
+  "....bbbbbbbbb...",
+  ".s..bbbbbbbbb.s.",
+  ".s..bbwbbwbb..s.",
+  "....bbbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....bbbbbbbb...",
+  ".....hhhhhhhh...",
+  "....hhhhhhhhhh..",
+];
+
+// big land — squash: wider overalls, feet planted
+export const marioBigLand = [
+  "......rrrr......",
+  "....rrrrrrrr....",
+  "....rrrrrrrrrr..",
+  "....rrrrrrrrrrr.",
+  "....rrrrrrrrrrrr",
+  "....hhsssssss...",
+  "....hssssskss...",
+  "....hshhhhhhs...",
+  "....rrrrrrrrr...",
+  "....rbrrrrrbr...",
+  "..ssbbbbbbbbs...",
+  "..bbbbbbbbbb....",
+  "..bbwbbwbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbwbbwbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..bbbbbbbbbb....",
+  "..hhhh...hhhh...",
+  ".hhhhh...hhhhh..",
 ];
 
 // --- goomba frames, 16-wide ---

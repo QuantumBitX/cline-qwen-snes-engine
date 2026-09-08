@@ -93,6 +93,8 @@ import { ParticleSystem } from './engine/particles.js';
 
   // --- Phase 4: sprite sheets + animation controller ---
   const playerSheet = new SpriteSheet('assets/sprites/player.png', 16, 16);
+  const playerBigSheet = new SpriteSheet('assets/sprites/player-big.png', 16, 32);   // big power (16x32 cells)
+  const playerFireSheet = new SpriteSheet('assets/sprites/player-fire.png', 16, 32);  // fire power (16x32 cells)
   const goombaSheet = new SpriteSheet('assets/sprites/goomba.png', 16, 16);
   const mushroomSheet = new SpriteSheet('assets/sprites/mushroom.png', 16, 16);
   const fireflowerSheet = new SpriteSheet('assets/sprites/fireflower.png', 16, 16);   // Phase 7b
@@ -759,12 +761,18 @@ import { ParticleSystem } from './engine/particles.js';
   }
   function drawPlayer() {
     const p = player; if (p.invuln > 0 && (frame & 4)) return;
-    if (playerSheet.loaded) {
+    // Pick the sheet by power state. The small sheet uses 16x16 cells; the
+    // big + fire sheets use 16x32 cells. Derive the vertical offset from the
+    // selected sheet's cell height so the feet stay flush to the ground for
+    // every size (fixes big/fire drawing a fixed 16px cell at the bottom of a
+    // 28px hitbox, which made all three power states look identical).
+    const sheet = p.power === 'fire' ? playerFireSheet : p.power === 'big' ? playerBigSheet : playerSheet;
+    if (sheet.loaded) {
       // Phase 4: draw from the PNG sprite sheet
       const fi = playerAnim.frame;
-      const dx = p.x - camX + (p.w - 16) / 2;
-      const dy = p.y + p.h - 16;
-      playerSheet.draw(ctx, fi, dx, dy, { flipX: p.facing < 0 });
+      const dx = p.x - camX + (p.w - sheet.cellW) / 2;
+      const dy = p.y + p.h - sheet.cellH;
+      sheet.draw(ctx, fi, dx, dy, { flipX: p.facing < 0 });
     } else {
       // Fallback: ASCII pixel-art
       const img = p.power === 'small' ? (p.onGround ? Sprites.marioSmall : Sprites.marioSmallJump) : Sprites.marioBig;
@@ -839,11 +847,13 @@ import { ParticleSystem } from './engine/particles.js';
   // --- Phase 4: initialize sprite sheets (init in Node, load in browser) ---
   if (isNode) {
     playerSheet.init(64, 32);   // 4×2 grid of 16×16
+    playerBigSheet.init(64, 64);   // 4×2 grid of 16×32 (big power)
+    playerFireSheet.init(64, 64);  // 4×2 grid of 16×32 (fire power)
     goombaSheet.init(32, 16);   // 2×1 grid of 16×16
     mushroomSheet.init(16, 16); // 1×1
     fireflowerSheet.init(16, 16); // 1×1 (Phase 7b)
   } else {
-    await Promise.all([playerSheet.load(), goombaSheet.load(), mushroomSheet.load(), fireflowerSheet.load()]);
+    await Promise.all([playerSheet.load(), playerBigSheet.load(), playerFireSheet.load(), goombaSheet.load(), mushroomSheet.load(), fireflowerSheet.load()]);
   }
 
   // --- boot (fixed-timestep loop lives in engine/loop.js) ---
@@ -874,6 +884,8 @@ import { ParticleSystem } from './engine/particles.js';
     get tilemap() { return tilemap; },
     // Phase 4: sprite sheet + animation access
     get playerSheet() { return playerSheet; },
+    get playerBigSheet() { return playerBigSheet; },
+    get playerFireSheet() { return playerFireSheet; },
     get goombaSheet() { return goombaSheet; },
     get mushroomSheet() { return mushroomSheet; },
     get fireflowerSheet() { return fireflowerSheet; },   // Phase 7b
